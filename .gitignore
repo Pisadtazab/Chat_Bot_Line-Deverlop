@@ -1,0 +1,20 @@
+# environment files
+.env
+.env.*
+env/
+.venv/
+
+# cache
+__pycache__/
+
+# uploads
+*.pdf
+
+# vscode
+.vscode/
+
+# logs
+*.log
+
+*.docker-compose.yml
+*.Dockerfile

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF File Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f4f9;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* Layout หลัก */
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        /* กล่อง Card */
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            min-width: 300px;
+        }
+
+        .file-list-container h2,
+        .form-container h2 {
+            margin-bottom: 15px;
+        }
+
+        /* รายการไฟล์ PDF */
+        .file-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            justify-content: center;
+        }
+
+        .file-list li {
+            padding: 8px 14px;
+            background-color: #f1f5f9;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* ฟอร์มลบไฟล์ */
+        input[type="text"] {
+            padding: 10px;
+            font-size: 16px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+<h1>PDF File Management</h1>
+
+<div class="container">
+
+    <!-- กล่องแสดงไฟล์ PDF -->
+    <div class="card file-list-container">
+        <h2>PDF Files in Database</h2>
+        <ul class="file-list">
+            {% for file_name in file_list %}
+            <li>{{ file_name }}</li>
+            {% else %}
+            <li>No PDF files found</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- กล่องลบไฟล์ -->
+    <div class="card form-container">
+        <h2>Delete PDF File</h2>
+        <label for="pdf_name">Enter PDF file name to delete:</label>
+        <input type="text" id="pdf_name" placeholder="Enter file name">
+        <button onclick="deleteFile()">Delete File</button>
+    </div>
+
+</div>
+
+<script>
+function deleteFile() {
+    const pdfName = document.getElementById('pdf_name').value;
+
+    if (!pdfName) {
+        alert("Please enter a PDF file name.");
+        return;
+    }
+
+    fetch(`/delete_file?pdf_name=${pdfName}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.text())
+    .then(data => {
+        alert(data);
+        window.location.reload();
+    })
+    .catch(error => {
+        alert("Error: " + error);
+    });
+}
+</script>
+
+</body>
+</html>
