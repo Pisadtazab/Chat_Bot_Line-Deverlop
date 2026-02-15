@@ -47,3 +47,4 @@ print(test)
 # print("ลบรูปทั้งหมด:", count)
 
 # print(collection.find_one())
+# อันนี้คือทดลอง
