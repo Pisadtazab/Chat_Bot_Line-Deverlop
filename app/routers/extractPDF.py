@@ -5,7 +5,7 @@ import numpy as np
 import unicodedata # Added for unicodedata.normalize
 from pythainlp.tokenize import word_tokenize # Added this import
 
-from typing import List, Dict
+from typing import List, Dict, Tuple  # ✅ [แก้ไข] เพิ่ม Tuple สำหรับ return type ของ extract_pdf_content
 import torch #ใช้กับโมเดลสรุปข้อความ
 from transformers import T5Tokenizer, MT5ForConditionalGeneration #สรุปข้อความ (summarization)
 
@@ -17,7 +17,16 @@ from pymongo.operations import SearchIndexModel
 import gridfs #เก็บที่อยู่รูปภาพ
 from dotenv import load_dotenv
 
+
 import os
+
+from fastapi import APIRouter ,HTTPException,UploadFile, File
+import shutil
+
+
+
+
+router = APIRouter()
 
 # การเก็บ key
 load_dotenv(override=True)
@@ -26,6 +35,12 @@ load_dotenv(override=True)
 # ใช้การด์จอ
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(" Using device:", device)
+
+
+# ✅ [แก้ไข] โหลด SentenceTransformer ครั้งเดียวตอนเริ่มโปรแกรม แทนที่จะโหลดซ้ำทุกครั้งที่เรียก embed_text
+# เดิม: โหลดในฟังก์ชัน embed_text ทำให้โหลดโมเดลใหม่ทุก call → ช้ามาก และเปลือง memory
+MODEL_NAME = "BAAI/bge-m3"
+sentence_model = SentenceTransformer(MODEL_NAME, device=device)
 
 
 # ใช้แปลงข้อความ เป็น token
@@ -54,6 +69,9 @@ def summarize_content(content: str) -> str:
       # สร้างข้อความใหม่
         preds = sum_model.generate(
             input_['input_ids'].to(device), #token ของข้อความ input, ส่งไปยัง CPU
+            # ✅ [แก้ไข] เพิ่ม attention_mask เพื่อให้โมเดลรู้ว่า token ไหนควรสนใจ
+            # เดิม: ไม่ได้ส่ง attention_mask ทำให้โมเดลอาจ attend ไปที่ padding token ด้วย
+            attention_mask=input_['attention_mask'].to(device),
             num_beams=15,  # ค้นหา sequence ที่ดีที่สุดโดยพิจารณา 4 ทางเลือกพร้อมกัน (จำนวนมากขึ้น → แม่นขึ้นแต่ช้า)
             num_return_sequences=1, # โมเดลจะ generate แค่ 1 ข้อความสรุป
             no_repeat_ngram_size=3, # ป้องกัน ซ้ำคำ/วลี 3 ตัวติดกัน ในสรุป
@@ -70,9 +88,12 @@ def summarize_content(content: str) -> str:
 
 
 # แยกเนื้อหา, รูป ออกจาก PDF เก็บเป็น list ภายใน chunk เดียวเดียวกัน
-def extract_pdf_content(pdf_path: str) -> List[Dict]:
+# ✅ [แก้ไข] เปลี่ยน return type เป็น Tuple[List[Dict], str] เพื่อ return ทั้ง chunks และ summary
+# เดิม: ใช้ global variable "summarize" ซึ่งเป็น anti-pattern
+def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
     """
     แยกข้อความและรูปภาพจาก PDF โดยใช้ PyMuPDF
+    คืนค่า: (content_chunks, summarized_text)
     """
     try:
         doc = fitz.open(pdf_path)
@@ -147,9 +168,13 @@ def extract_pdf_content(pdf_path: str) -> List[Dict]:
         print("################################")
         print(f"{ thaitoken_text }")
         print("################################")
-        global summarize
+
+        # ✅ [แก้ไข] เปลี่ยนจาก global variable มาเป็น local variable แล้ว return ออกไปแทน
+        # เดิม: global summarize = summarize_content(thaitoken_text) → ใช้ global ใน function เป็น anti-pattern
         summarize = summarize_content(thaitoken_text)
-        return content_chunks
+
+        # ✅ [แก้ไข] return ทั้ง content_chunks และ summarize ออกไปพร้อมกัน
+        return content_chunks, summarize
 
     except Exception as e:
         print("เกิดข้อผิดพลาดในการแยก PDF: %s", str(e))
@@ -185,9 +210,10 @@ def embed_text(text: str) -> np.ndarray:
     processed_text = preprocess_thai_text(text) if any(ord(c) >= 0x0E00 and ord(c) <= 0x0E7F for c in text) else text
 
     # เรียกใช้ model embedding
-    MODEL_NAME = "BAAI/bge-m3"
-    # เรียกการด์จอ
-    sentence_model = SentenceTransformer(MODEL_NAME,device=device)
+    # ✅ [แก้ไข] ลบการโหลด SentenceTransformer ออกจากฟังก์ชันนี้
+    # เดิม: MODEL_NAME = "BAAI/bge-m3" และ sentence_model = SentenceTransformer(MODEL_NAME, device=device)
+    #        อยู่ในฟังก์ชันนี้ ทำให้โหลดโมเดลใหม่ทุกครั้งที่เรียก → ช้าและเปลือง memory
+    # ใหม่: ใช้ sentence_model ที่โหลดไว้แล้ว 1 ครั้งตอนต้นไฟล์ (global scope)
 
     # สร้าง embedding ด้วย SentenceTransformer
     # The 'device' variable is not defined globally. Assuming it should be 'cpu' for general use.
@@ -272,30 +298,66 @@ def store_in_mongodb(content_chunks: List[Dict], pdf_name: str):
 # pdf_path = os.path.join(current_dir, "src", "FoodMenu.pdf")
 # import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-pdf_path = os.path.join(BASE_DIR, "..", "src", "10RicherInthai2024.pdf")
+SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+os.makedirs(SRC_DIR, exist_ok=True)  # สร้างโฟลเดอร์ถ้ายังไม่มี
+# # ✅ [แก้ไข] pdf_path เปลี่ยนเป็น SRC_DIR ชี้แค่โฟลเดอร์ src/ ไม่ชี้ไฟล์ใดไฟล์หนึ่ง
+# # เดิม: pdf_path ชี้ไปที่ไฟล์ PDF โดยตรง → ถ้าไม่มีไฟล์จะ error ตอน import
 
-try:
-    pdf_content = extract_pdf_content(pdf_path)
-    print("\nExtracted Content Chunks:")
-    # Print a summary or part of the extracted content for verification
-    for i, chunk in enumerate(pdf_content[:3]): # Print first 3 chunks
-        print(f"Chunk {i+1}: Text length = {len(chunk['text'])}, Images = {len(chunk['images'])}")
 
-        # print(f"Text: {chunk['text'][:300]}...") # Print first 200 chars of text
-    print(f"\nSummarized Content: {summarize}")
+# เอาไว้ test pdf โดยเฉพาะ
+# try:
+#     pdf_content = extract_pdf_content(pdf_path)
+#     print("\nExtracted Content Chunks:")
+#     # Print a summary or part of the extracted content for verification
+#     for i, chunk in enumerate(pdf_content[:3]): # Print first 3 chunks
+#         print(f"Chunk {i+1}: Text length = {len(chunk['text'])}, Images = {len(chunk['images'])}")
 
-    # Embed the summarized content and store it in a global variable to be printed
-    global document_embedding # Declare document_embedding as global
-    document_embedding = embed_text(summarize)
-    print(f"\nEmbedding of summarized content: {document_embedding}")
+#         # print(f"Text: {chunk['text'][:300]}...") # Print first 200 chars of text
+#     print(f"\nSummarized Content: {summarize}")
 
-except FileNotFoundError:
-    print(f"Error: PDF file not found at {pdf_path}")
-except Exception as e:
-    print(f"An error occurred during PDF processing: {e}")
-    raise
+#     # Embed the summarized content and store it in a global variable to be printed
+#     global document_embedding # Declare document_embedding as global
+#     document_embedding = embed_text(summarize)
+#     print(f"\nEmbedding of summarized content: {document_embedding}")
+
+# except FileNotFoundError:
+#     print(f"Error: PDF file not found at {pdf_path}")
+# except Exception as e:
+#     print(f"An error occurred during PDF processing: {e}")
+#     raise
+
+# ✅ [แก้ไข] ลบ mogodb_store ออกจาก global scope
+# เดิม: mogodb_store = store_in_mongodb(pdf_content, pdf_path) → รันทันทีตอน import
+#        ถ้าไม่มี pdf_content (เพราะ try block ถูก comment ออก) จะ NameError
+#        และถ้า pdf ไม่มีอยู่จริง server จะ start ไม่ได้เลย
+# ใหม่: การ store จะเกิดขึ้นใน /upload_pdf endpoint เท่านั้น
 
 #บันทึกลงฐานข้อมูล
-mogodb_store = store_in_mongodb(pdf_content, pdf_path)
-print(f"\nStoring in MongoDB : {mogodb_store}")
+# mogodb_store = store_in_mongodb(pdf_content, pdf_path)
+# print(f"\nStoring in MongoDB : {mogodb_store}")
+
+
+# input ไฟล์ PDF
+@router.post("/upload_pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files allowed")
+
+    # ✅ ใช้ SRC_DIR แทน BASE_DIR + "../src" เพื่อความสะอาด
+    save_path = os.path.join(SRC_DIR, file.filename)
+    with open(save_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # รัน extract และ store ลง MongoDB
+    # ✅ [แก้ไข] รับค่า 2 ตัวจาก extract_pdf_content (content_chunks, summarize)
+    pdf_content, summarize = extract_pdf_content(save_path)
+    store_in_mongodb(pdf_content, file.filename)
+
+    return {"message": f"{file.filename} uploaded and processed"}
+
+# @router.get("/list_files")
+# async def list_files():
+#     collection = get_db()
+#     # ดึงรายชื่อไฟล์ที่ unique จาก MongoDB
+#     sources = collection.distinct("metadata.source")
+#     return {"files": sources}

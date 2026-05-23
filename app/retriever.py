@@ -12,7 +12,8 @@ from pythainlp.tokenize import word_tokenize # Added this import
 from bson.objectid import ObjectId
 from openai import OpenAI
 import re
-from bson import ObjectId
+# import time
+
 
 # from linebot.models import ImageSendMessage
 # from linebot import LineBotApi
@@ -43,6 +44,28 @@ MODEL_NAME = "BAAI/bge-m3"
 sentence_model = SentenceTransformer(MODEL_NAME)
 
 
+import time
+import threading
+
+REQUEST_INTERVAL = 0.25  # 4 request / sec
+last_request_time = 0
+rate_lock = threading.Lock()
+
+def wait_for_rate_limit():
+    """ เช็คว่า ยิง api ตอนไหน
+        ถ้าไม่ถึง 2.5 วิ ต้องรอให้ครบถึงจะส่ง
+        เป็นการจัดการเวลา การเข้า api ให้มีการ delay
+    """
+    global last_request_time
+    
+    with rate_lock:
+        now = time.time()
+        diff = now - last_request_time
+
+        if diff < REQUEST_INTERVAL:
+            time.sleep(REQUEST_INTERVAL - diff)
+
+        last_request_time = time.time()
 
 def query_rag(query_text):
     """
@@ -66,17 +89,18 @@ def query_rag(query_text):
 
     # --- 2) กำหนดจำนวนผลลัพธ์ตามคำถาม ---
     max_result = 3
+    
     if "กี่" in query_text or "บ้าง" in query_text:
         max_result = 5
     if "ทั้งหมด" in query_text:
         max_result = 10
 
-
+    
     # --- 3) MongoDB vector search ---
     pipeline = [
         {
             "$vectorSearch": {
-                "index": "vector_index2",
+                "index": "vector_index",
                 "path": "embedding",
                 "queryVector": question_embedding,
                 "numCandidates": 100,
@@ -130,6 +154,9 @@ def query_rag(query_text):
         api_key= os.getenv("Typhoon_api_key"),
         base_url="https://api.opentyphoon.ai/v1"
     )
+    
+    # เรียกใช้ฟังก์ชั่น ระยะเวลารอ api
+    wait_for_rate_limit()
 
     response = typhoon_client.chat.completions.create(
     model="typhoon-v2.5-30b-a3b-instruct",
@@ -138,7 +165,7 @@ def query_rag(query_text):
         {"role": "user", "content":  prompt}
     ],
     temperature=0.7,
-    max_tokens=4830,
+    max_tokens=10000,
     top_p=0.9,
     presence_penalty=0.6 # alternative
 )
@@ -218,17 +245,34 @@ def id_image(llm_answer, collection,current_pdf_name):
 
 
 
-def send_image(gridfs_ids):
-    """ ส่งรูปภาพผ่านไลน์ ด้วย push """
-    images = []
-    for file_id in gridfs_ids:
-        # ต้องเปลี่ยน url ตลอดเวลา
-        url = f"  https://1aa5-182-232-158-73.ngrok-free.app/image/{file_id}".strip()
-        # Create the ImageMessage object
-        images.append(
-            ImageMessage(
-            original_content_url=url,
-            preview_image_url=url 
-        ))
 
-    return images   
+def send_image(gridfs_ids):
+    """ส่งรูปภาพผ่านไลน์ด้วย push"""
+    
+    ngrok_uri = os.getenv("NGROK_URL")  
+
+    try:
+        if not ngrok_uri:
+            raise ValueError("NGROK_URI not set")
+
+        # ถ้า env มี https อยู่แล้วจะไม่ซ้ำ
+        if not ngrok_uri.startswith("http"):
+            base_url = f"https://{ngrok_uri}"
+        else:
+            base_url = ngrok_uri
+
+        images = []
+
+        for file_id in gridfs_ids:
+            url = f"{base_url}/image/{file_id}"
+
+            images.append(
+                ImageMessage(
+                    original_content_url=url,
+                    preview_image_url=url
+                )
+            )
+
+        return images
+    except Exception as e:
+        print("ไม่มีรูปภาพส่ง")

@@ -7,6 +7,8 @@ env/
 # cache
 __pycache__/
 
+*.src
+
 # uploads
 *.pdf
 

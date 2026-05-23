@@ -5,132 +5,228 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF File Management</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background-color: #f4f4f9;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; padding: 32px 24px; background-color: #f4f4f9; }
 
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #1a1a2e;
         }
 
         /* Layout หลัก */
-        .container {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            flex-wrap: wrap;
-        }
+        .container { display: flex; flex-direction: column; gap: 16px; max-width: 900px; margin: 0 auto; }
+
+        .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 
         /* กล่อง Card */
         .card {
             background: white;
             padding: 20px;
             border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-            min-width: 300px;
+            border: 1px solid #e2e8f0;
         }
 
-        .file-list-container h2,
-        .form-container h2 {
-            margin-bottom: 15px;
+        .section-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #64748b;
+            margin-bottom: 12px;
         }
 
         /* รายการไฟล์ PDF */
-        .file-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            justify-content: center;
+        .file-tags { display: flex; flex-wrap: wrap; gap: 8px; min-height: 36px; }
+
+        .pdf-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #334155;
         }
 
-        .file-list li {
-            padding: 8px 14px;
-            background-color: #f1f5f9;
-            border: 1px solid #dbe2ea;
+        .pdf-tag .icon { color: #dc2626; font-size: 13px; }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 1.5px dashed #cbd5e1;
             border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .drop-zone:hover { background: #f8fafc; }
+        .drop-zone .icon-pdf { font-size: 28px; display: block; margin-bottom: 6px; color: #94a3b8; }
+        .drop-zone p { font-size: 13px; color: #64748b; }
+        .drop-zone span { color: #3b82f6; }
+
+        /* Input และ Button */
+        input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
             font-size: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        input[type="text"]:focus { border-color: #94a3b8; }
+
+        .btn-delete {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: white;
+            color: #dc2626;
+            border: 1px solid #fca5a5;
+            border-radius: 8px;
+            cursor: pointer;
             white-space: nowrap;
         }
 
-        /* ฟอร์มลบไฟล์ */
-        input[type="text"] {
-            padding: 10px;
-            font-size: 16px;
-            width: 100%;
-            margin-bottom: 10px;
-        }
+        .btn-delete:hover { background: #fef2f2; }
 
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-        }
+        .delete-row { display: flex; gap: 10px; align-items: center; }
 
-        button:hover {
-            background-color: #0056b3;
-        }
+        .status-msg { font-size: 13px; min-height: 18px; margin-top: 8px; }
+        .status-success { color: #16a34a; }
+        .status-error { color: #dc2626; }
+        .status-info { color: #64748b; }
     </style>
 </head>
 <body>
 
-<h1>PDF File Management</h1>
-
 <div class="container">
 
-    <!-- กล่องแสดงไฟล์ PDF -->
-    <div class="card file-list-container">
-        <h2>PDF Files in Database</h2>
-        <ul class="file-list">
-            {% for file_name in file_list %}
-            <li>{{ file_name }}</li>
-            {% else %}
-            <li>No PDF files found</li>
-            {% endfor %}
-        </ul>
+    <div class="page-title">📁 PDF File Management</div>
+
+    <div class="row">
+
+        <!-- กล่องแสดงไฟล์ PDF -->
+        <div class="card">
+            <div class="section-label">🗄 Files in database</div>
+            <div class="file-tags" id="file-tags">
+                <span style="font-size:13px; color:#94a3b8;">Loading...</span>
+            </div>
+        </div>
+
+        <!-- กล่อง Upload -->
+        <div class="card">
+            <div class="section-label">⬆ Upload PDF</div>
+            <div class="drop-zone" id="drop-zone"
+                onclick="document.getElementById('file-input').click()"
+                ondragover="event.preventDefault(); this.style.background='#f1f5f9'"
+                ondragleave="this.style.background=''"
+                ondrop="onDrop(event)">
+                <span class="icon-pdf">📄</span>
+                <p>Drop file here or <span>browse</span></p>
+            </div>
+            <input type="file" id="file-input" accept=".pdf" style="display:none;" onchange="onFileSelect(event)">
+            <div class="status-msg" id="upload-status"></div>
+        </div>
+
     </div>
 
     <!-- กล่องลบไฟล์ -->
-    <div class="card form-container">
-        <h2>Delete PDF File</h2>
-        <label for="pdf_name">Enter PDF file name to delete:</label>
-        <input type="text" id="pdf_name" placeholder="Enter file name">
-        <button onclick="deleteFile()">Delete File</button>
+    <div class="card">
+        <div class="section-label">🗑 Delete PDF file</div>
+        <div class="delete-row">
+            <input type="text" id="pdf_name" placeholder="Enter PDF file name to delete">
+            <button class="btn-delete" onclick="deleteFile()">Delete</button>
+        </div>
+        <div class="status-msg" id="delete-status"></div>
     </div>
 
 </div>
 
 <script>
-function deleteFile() {
-    const pdfName = document.getElementById('pdf_name').value;
+    function setStatus(elId, msg, type) {
+        const el = document.getElementById(elId);
+        el.className = 'status-msg status-' + type;
+        el.textContent = msg;
+    }
+    // กรองหลาย document ต่อไฟล์เดียว กรองเอาแค่ชื่อไฟล์ และ deduplicate:
+    function renderTags(file_list) {
+        const el = document.getElementById('file-tags');
+        if (!file_list || !file_list.length) {
+            el.innerHTML = '<span style="font-size:13px;color:#94a3b8;">No PDF files found</span>';
+            return;
+        }
 
-    if (!pdfName) {
-        alert("Please enter a PDF file name.");
-        return;
+        // ดึงแค่ชื่อไฟล์ (ตัดเอา path ออก) และ deduplicate
+        const uniqueNames = [...new Set(
+            file_list.map(f => f.file_name.split('/').pop())
+        )];
+
+        el.innerHTML = uniqueNames.map(name =>
+            `<span class="pdf-tag"><span class="icon">📕</span>${name}</span>`
+        ).join('');
     }
 
-    fetch(`/delete_file?pdf_name=${pdfName}`, {
-        method: 'DELETE'
-    })
-    .then(response => response.text())
-    .then(data => {
-        alert(data);
-        window.location.reload();
-    })
-    .catch(error => {
-        alert("Error: " + error);
-    });
-}
+    // โหลดรายชื่อไฟล์ทุกครั้งที่เปิดหน้า
+    async function loadFiles() {
+        try {
+            const url = await fetch('/files');
+            if (!url.ok) throw new Error();
+            const data = await url.json();
+            console.log(data);
+            renderTags(data);
+        } catch(e) { 
+            console.log('error:', e);
+            renderTags([]); 
+        }
+    }
+
+    // อัปโหลดไฟล์ PDF แล้ว POST ไปที่ /upload_pdf
+    async function uploadFile(file) {
+        if (!file || file.type !== 'application/pdf') {
+            setStatus('upload-status', 'Please select a valid PDF file.', 'error'); return;
+        }
+        setStatus('upload-status', `Uploading ${file.name}...`, 'info');
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const r = await fetch('/upload_pdf', { method: 'POST', body: form });
+            if (!r.ok) { setStatus('upload-status', 'Upload failed: ' + await r.text(), 'error'); return; }
+            setStatus('upload-status', `${file.name} uploaded successfully.`, 'success');
+            await loadFiles(); // รีเฟรชรายการไฟล์
+        } catch(e) { setStatus('upload-status', 'Error: ' + e.message, 'error'); }
+    }
+
+    function onFileSelect(e) { uploadFile(e.target.files[0]); }
+
+    function onDrop(e) {
+        e.preventDefault();
+        document.getElementById('drop-zone').style.background = '';
+        uploadFile(e.dataTransfer.files[0]);
+    }
+
+    // ลบไฟล์ PDF โดย DELETE ไปที่ /delete_file
+    async function deleteFile() {
+        const pdfName = document.getElementById('pdf_name').value.trim();
+        if (!pdfName) { setStatus('delete-status', 'Please enter a file name.', 'error'); return; }
+        setStatus('delete-status', `Deleting ${pdfName}...`, 'info');
+        try {
+            const remove = await fetch(`/delete_file?pdf_name=${encodeURIComponent(pdfName)}`, { method: 'DELETE' });
+            if (!remove.ok) { setStatus('delete-status', 'Failed: ' + await remove.text(), 'error'); return; }
+            setStatus('delete-status', `${pdfName} deleted successfully.`, 'success');
+            document.getElementById('pdf_name').value = '';
+            await loadFiles(); // รีเฟรชรายการไฟล์
+        } catch(e) { setStatus('delete-status', 'Error: ' + e.message, 'error'); }
+    }
+
+    loadFiles();
 </script>
 
 </body>
