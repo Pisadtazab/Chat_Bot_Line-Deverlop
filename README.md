@@ -123,7 +123,8 @@ ACCESS_TOKEN=your_line_channel_access_token
 CHANNEL_SECRET=your_line_channel_secret
 TYPHOON_API_KEY=your_typhoon_api_key
 MONGODB_URI=your_mongodb_connection_string
-
+NGROK_TOKEN=your_token
+NGROK_URL=your_url
 ```
 
 **3. รัน FastAPI**
