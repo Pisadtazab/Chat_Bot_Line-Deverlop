@@ -9,18 +9,26 @@ class notifyLogin(BaseModel):
 
 router = APIRouter()
 
-
-@router.post("/UserLine_id")  # ✅ เปลี่ยนจาก GET เป็น POST
+@router.post("/UserLine_id")
 def sendNotify_Login(data: notifyLogin):
-    push_flex_notification(
-        user_id=data.userId,
-        title=f"สวัสดีคุณ {data.Firstname}! 👋",
-        message="ระบบแจ้งเตือนพร้อมแล้ว \nยินดีต้อนรับเข้าสู่ระบบ😊",
-        color="#00B900"
-    )
-    return {"status": "success", "message": f"ส่งแจ้งเตือนถึง {data.Firstname} แล้ว"}
+    
+    #  เช็ค Status ปัจจุบันใน collection
+    existing_user = notify_collection.find_one({"userId": data.userId})
+    
+    if existing_user and existing_user.get("Status") == "Approved":
+        #  ยังไม่ Approved → ส่งแจ้งเตือน
+        print(f" กำลัง push ไปที่ userId: {data.userId}")
+        push_flex_notification(
+            user_id=data.userId,
+            title=f"สวัสดีคุณ {data.Firstname}! 👋",
+            message="ระบบแจ้งเตือนพร้อมแล้ว \nยินดีต้อนรับเข้าสู่ระบบ😊",
+            color="#00B900"
+        )
+        return {"status": "success"}
 
-
-
+    
+    print(" Approved แล้ว skip")
+    return {"status": "skip"}
+    
 # if __name__ == "__main__":
 #     sendNotify_Login()

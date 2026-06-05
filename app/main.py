@@ -43,6 +43,7 @@ from app.notification.routers.line_notify import push_flex_notification
 from app.notification.DB.database_noti import collection as notify_collection
 
 from app.notification.users.Advisor.NotifyQueue import router as noti_router 
+from app.notification.users.Student.NotifyQueueStudent import router as noti_router_St
 from app.notification.routers.GetLine_id  import router as notify_Login
 
 
@@ -53,10 +54,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:8000",
-        "http://localhost:5000", #API ระบบแชทบอท localhost
-        "https://bugs-soldiers-acquired-gamecube.trycloudflare.com",#API ระบบแชทบอท https
-        "https://kai-sector-classic-workshops.trycloudflare.com", #frontend 🔔ตรงนี้เอาไปใส่ในไลน์ dev
-        "https://zip-knew-letters-respondent.trycloudflare.com", #backend
+        "http://localhost:5000" #API ระบบแชทบอท localhost
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -78,9 +76,11 @@ app.include_router(deleteFile.router)
 #🔔 router สำหรับ notify line
 app.include_router(notify_Login, prefix="/NotifyFristLogin", tags=["Notification"])
 
+# Student
+app.include_router(noti_router_St, prefix="/NotifyQueueStudent", tags=["Notification"])
 # Advisor
 app.include_router(noti_router, prefix="/NotifyQueueAdivsor", tags=["Notification"])
-print("✅ notify_Login routes:", [r.path for r in notify_Login.routes])
+
 # การเก็บ key
 load_dotenv(override=True)
 
@@ -151,7 +151,7 @@ def handle_follow(event: FollowEvent):
         push_flex_notification(
             user_id=messaging_user_id,
             title="ยังไม่พบข้อมูลการสมัคร ❌",
-            message="กรุณาสมัครสมาชิกก่อนนะครับ \nเพื่อรับการแจ้งเตือน",
+             message="กรุณาสมัครสมาชิกในระบบจอง 😊\nเพื่อรับการแจ้งเตือนคิวและนัดหมาย\nในระหว่างนี้ท่านสามารถใช้แชทบอทสอบถามได้",
             color="#FF4444"
         )
 
