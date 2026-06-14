@@ -41,7 +41,7 @@ User (LINE App)
 LINE Platform ──POST /callback──▶ Cloudflare Tunnel
                                         │
                                         ▼
-                               FastAPI (main.py) :8000
+                               FastAPI (main.py) :5000
                                    │
                     ┌──────────────┼──────────────┐
                     ▼              ▼               ▼
