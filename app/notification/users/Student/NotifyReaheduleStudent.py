@@ -2,7 +2,9 @@ import os
 import requests
 from fastapi import APIRouter
 from dotenv import load_dotenv
+
 from pydantic import BaseModel
+
 
 # ค้นหาไฟล์ .env จากโฟลเดอร์หลักอัตโนมัติ
 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
@@ -12,21 +14,25 @@ load_dotenv(dotenv_path=dotenv_path)
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
+class RecheduleData(BaseModel):
+    UserId   : str
+    StudentName : str
+    Date        : str
+    Time        : str
+    Status      : str
+
 router = APIRouter()
 
-class StudentNotifyData(BaseModel):
-    userId: str       # userId ของนักศึกษา
-    StudentName: str
-    AdvisorName: str
-    Date: str
-    Time: str
-    Status: str       # "Approved" หรือ "Cancelled"
+def push_flex_rechedule_notification(user_id: str, title: str, student_name: str, status_text: str, date: str, time: str, color: str = "#445DFF") -> dict:
+    if not ACCESS_TOKEN:
+        print("[ERROR] ไม่พบ ACCESS_TOKEN")
+        return {"status": 401, "message": "Missing ACCESS_TOKEN"}
 
-def push_flex_notification(user_id: str, title: str, student_name: str, advisor_name: str, date: str, time: str, status_text: str, color: str) -> dict:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {ACCESS_TOKEN}",
     }
+
     payload = {
         "to": user_id,
         "messages": [
@@ -61,15 +67,7 @@ def push_flex_notification(user_id: str, title: str, student_name: str, advisor_
                                 "layout": "horizontal",
                                 "contents": [
                                     {"type": "text", "text": "👤 ชื่อ", "size": "sm", "color": "#aaaaaa", "flex": 2},
-                                    {"type": "text", "text": student_name, "size": "sm", "color": "#1a1a1a", "flex": 4}
-                                ]
-                            },
-                            {
-                                "type": "box",
-                                "layout": "horizontal",
-                                "contents": [
-                                    {"type": "text", "text": "👨‍🏫 อาจารย์", "size": "sm", "color": "#aaaaaa", "flex": 2},
-                                    {"type": "text", "text": advisor_name, "size": "sm", "color": "#1a1a1a", "flex": 4}
+                                    {"type": "text", "text": student_name, "size": "sm", "color": "#1a1a1a", "wrap": True, "flex": 4}
                                 ]
                             },
                             {
@@ -93,8 +91,8 @@ def push_flex_notification(user_id: str, title: str, student_name: str, advisor_
                                 "type": "box",
                                 "layout": "horizontal",
                                 "contents": [
-                                    {"type": "text", "text": "🔖 สถานะ", "size": "sm", "color": "#aaaaaa", "flex": 2},
-                                    {"type": "text", "text": status_text, "size": "sm", "color": color, "weight": "bold", "flex": 4}
+                                    {"type": "text", "text": " สถานะ", "size": "sm", "color": "#000000", "flex": 2},
+                                    {"type": "text", "text": status_text, "color": "#445DFF", "size": "sm", "weight": "bold", "wrap": True, "flex": 4}
                                 ]
                             }
                         ],
@@ -118,40 +116,29 @@ def push_flex_notification(user_id: str, title: str, student_name: str, advisor_
             }
         ]
     }
+
     try:
         response = requests.post(LINE_PUSH_URL, headers=headers, json=payload)
-        print(f"Flex Push to {user_id}: {response.status_code}")
+        print(f"Flex Push Cancel to {user_id}: {response.status_code}")
+        print(f" LINE response: {response.json()}") 
         return response.json()
     except Exception as e:
-        print(f"❌ ส่ง Flex Line ล้มเหลว: {e}")
+        print(f" ส่ง Flex Line ล้มเหลว: {e}")
         return {"status": 500, "message": str(e)}
 
+@router.post("/RecheduleStudent")
+def notify_Rechedule(data: RecheduleData):
+     
+    if data.Status == "Rescheduled":
+        status_text = "้เลื่อนคิว"
 
-@router.post("/NotifyStudent")
-def notify_student(data: StudentNotifyData):
-
-    if data.Status == "Approved":
-        title = "การจองได้รับการยืนยัน ✅"
-        status_text = "ยืนยันแล้ว"
-        color = "#00B900"  # 🟢 สีเขียว
-
-    elif data.Status == "Cancelled":
-        title = "การจองถูกยกเลิก ❌"
-        status_text = "ยกเลิกแล้ว"
-        color = "#FF4444"  # 🔴 สีแดง
-
-    else:
-        return {"status": "skip", "message": "ไม่รู้จัก Status"}
-
-    push_flex_notification(
-        user_id=data.userId,
-        title=title,
+    push_flex_rechedule_notification(
+        user_id=data.UserId,
+        title="อาจารย์เลื่อนคิว",
         student_name=data.StudentName,
-        advisor_name=data.AdvisorName,
         date=data.Date,
         time=data.Time,
         status_text=status_text,
-        color=color 
+        color="#445DFF" 
     )
-
-    return {"status": "success", "message": f"แจ้งเตือนนักศึกษา {data.StudentName} แล้ว"}
+    return {"status": "success"}

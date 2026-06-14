@@ -15,11 +15,12 @@ ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
 class BookingData(BaseModel):
-    userId: str
-    StudentName: str
-    Date: str
-    Time: str
-    Status: str
+    AdvisorId    : str
+    StudentName  : str
+    ResearchTopic: str
+    Date         : str
+    Time         : str
+    Status       : str
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ router = APIRouter()
 # ─────────────────────────────────────────────
 # Push: Flex Message แจ้งเตือน (กำหนด default เป็นสีเหลืองส้มเตือน #FFB100)
 # ─────────────────────────────────────────────
-def push_flex_notification(user_id: str, title: str, student_name: str, date: str, time: str, status_text: str, color: str = "#FFB100") -> dict:
+def push_flex_notification(user_id: str, title: str, student_name: str, research_topic: str, date: str, time: str, status_text: str, color: str = "#FFB100") -> dict:
     if not ACCESS_TOKEN:
         print(" [ERROR] ไม่พบ ACCESS_TOKEN กรุณาตรวจสอบไฟล์ .env")
         return {"status": 401, "message": "Missing ACCESS_TOKEN"}
@@ -74,6 +75,15 @@ def push_flex_notification(user_id: str, title: str, student_name: str, date: st
                                     {"type": "text", "text": student_name, "size": "sm", "color": "#1a1a1a", "wrap": True, "flex": 4}
                                 ]
                             },
+                            # ✅ เพิ่ม ResearchTopic
+                            {
+                                "type": "box",
+                                "layout": "horizontal",
+                                "contents": [
+                                    {"type": "text", "text": "📝 หัวข้อ", "size": "sm", "color": "#aaaaaa", "flex": 2},
+                                    {"type": "text", "text": research_topic, "size": "sm", "color": "#1a1a1a", "wrap": True, "flex": 4}
+                                ]
+                            },
                             {
                                 "type": "box",
                                 "layout": "horizontal",
@@ -95,7 +105,7 @@ def push_flex_notification(user_id: str, title: str, student_name: str, date: st
                                 "type": "box",
                                 "layout": "horizontal",
                                 "contents": [
-                                    {"type": "text", "text": "🟢 สถานะ", "size": "sm", "color": "#aaaaaa", "flex": 2},
+                                    {"type": "text", "text": "🟡 สถานะ", "size": "sm", "color": "#aaaaaa", "flex": 2},
                                     {"type": "text", "text": status_text, "size": "sm", "color": color, "weight": "bold", "flex": 4}
                                 ]
                             }
@@ -126,23 +136,24 @@ def push_flex_notification(user_id: str, title: str, student_name: str, date: st
         print(f"Flex Push to {user_id}: {response.status_code}")
         return response.json()
     except Exception as e:
-        print(f"❌ ส่ง Flex Line ล้มเหลว: {e}")
+        print(f" ส่ง Flex Line ล้มเหลว: {e}")
         return {"status": 500, "message": str(e)}
 
 
-@router.post("/BookingStudent")  # ✅ เปลี่ยนเป็น POST รับข้อมูลจากระบบจอง
+# แจ้งเตือนมีคนจอง
+@router.post("/BookingStudent")
 def notifyqueue(data: BookingData):
     push_flex_notification(
-        user_id=data.userId,  # ✅ userId ของ Advisor
+        user_id=data.AdvisorId,
         title="มีนักศึกษาขอจองคิว 📋",
         student_name=data.StudentName,
+        research_topic=data.ResearchTopic, 
         date=data.Date,
         time=data.Time,
         status_text="รอการอนุมัติ",
-        color="#FFB100"  # 🟡 สีเหลืองเสมอ
+        color="#FFB100"
     )
     return {"status": "success"}
 
-
-if __name__ == "__main__":
-    notifyqueue()
+# if __name__ == "__main__":
+#     notifyqueue()

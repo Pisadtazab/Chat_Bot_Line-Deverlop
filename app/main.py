@@ -43,7 +43,12 @@ from app.notification.routers.line_notify import push_flex_notification
 from app.notification.DB.database_noti import collection as notify_collection
 
 from app.notification.users.Advisor.NotifyQueue import router as noti_router 
+from app.notification.users.Advisor.NotifyQueueCancelled import  router as noti_router_cancelled
+from app.notification.users.Advisor.NotifyRecheduleAdvisor import router as noti_router_rechedule_Ad
+
 from app.notification.users.Student.NotifyQueueStudent import router as noti_router_St
+from app.notification.users.Student.NotifyReaheduleStudent import router as noti_router_rechedule_St
+
 from app.notification.routers.GetLine_id  import router as notify_Login
 
 
@@ -78,9 +83,12 @@ app.include_router(notify_Login, prefix="/NotifyFristLogin", tags=["Notification
 
 # Student
 app.include_router(noti_router_St, prefix="/NotifyQueueStudent", tags=["Notification"])
+app.include_router(noti_router_rechedule_St, prefix="/NotifyQueueStudent" , tags=["Notification"])
+
 # Advisor
 app.include_router(noti_router, prefix="/NotifyQueueAdivsor", tags=["Notification"])
-
+app.include_router(noti_router_cancelled, prefix="/NotifyCancelled", tags=["Notification"])
+app.include_router(noti_router_rechedule_Ad, prefix="/NotifyQueueAdivsor",tags=["Notification"])
 # การเก็บ key
 load_dotenv(override=True)
 
