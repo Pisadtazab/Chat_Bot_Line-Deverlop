@@ -29,6 +29,7 @@ from app.response_message import response_message #ติดต่อกับ�
 from app.retriever import query_rag ,respone_message_LLM,id_image,send_image
 from DB.database import collection,db
 
+
 from fastapi import HTTPException
 
 
@@ -48,22 +49,32 @@ from app.notification.users.Advisor.NotifyRecheduleAdvisor import router as noti
 
 from app.notification.users.Student.NotifyQueueStudent import router as noti_router_St
 from app.notification.users.Student.NotifyReaheduleStudent import router as noti_router_rechedule_St
+from app.notification.users.Student.NotifyUrl_Student import router as noti_router_chatlink_St
 
 from app.notification.routers.GetLine_id  import router as notify_Login
 
 
 app = FastAPI()
 
+load_dotenv(override=True)
+
+Backend = os.getenv("Backend_BORC_URL")
+Frontend = os.getenv("Frontend_BORC_URL")
+ChatBot = os.getenv("ChatBot_URL")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins = [
         "http://localhost:5173",
         "http://localhost:8000",
-        "http://localhost:5000" #API ระบบแชทบอท localhost
+        "http://localhost:5000", #API ระบบแชทบอท localhost
+        Frontend, #frontend 🔔ตรงนี้เอาไปใส่ในไลน์ dev
+        Backend,
+        ChatBot
     ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials = True,
+    allow_methods     = ["*"],
+    allow_headers     = ["*"],
 )
 
 # routers สำหรับ web 
@@ -89,6 +100,9 @@ app.include_router(noti_router_rechedule_St, prefix="/NotifyQueueStudent" , tags
 app.include_router(noti_router, prefix="/NotifyQueueAdivsor", tags=["Notification"])
 app.include_router(noti_router_cancelled, prefix="/NotifyCancelled", tags=["Notification"])
 app.include_router(noti_router_rechedule_Ad, prefix="/NotifyQueueAdivsor",tags=["Notification"])
+
+app.include_router(noti_router_chatlink_St, prefix="/NotifyChat", tags=["Notification_Chat"])
+
 # การเก็บ key
 load_dotenv(override=True)
 
