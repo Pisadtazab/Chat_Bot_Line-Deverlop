@@ -72,6 +72,8 @@ External System ──POST /NotifyQueueAdivsor/...──▶ FastAPI
 ```
 Chat_Bot_Line-Deverlop/
 ├── app/
+├── DB/
+│   |── database.py                      # MongoDB connection หลัก, delete_pdf_from_db()
 │   ├── main.py                          # FastAPI entry point, /callback webhook
 │   ├── retriever.py                     # RAG pipeline (query, embedding, image lookup)
 │   ├── promrt_typhoon.py                # Typhoon AI system prompt & completion
@@ -95,8 +97,6 @@ Chat_Bot_Line-Deverlop/
 │       ├── extractPDF.py                # อัปโหลดและแยก PDF → MongoDB
 │       ├── getData.py                   # ดึงรายชื่อ PDF / รูปภาพจาก DB
 │       └── deleteFile.py               # ลบไฟล์ PDF จาก DB
-├── DB/
-│   └── database.py                      # MongoDB connection หลัก, delete_pdf_from_db()
 ├── templates/
 │   └── index.html                       # หน้า Admin UI จัดการ PDF
 ├── Dockerfile                           # Python 3.12 + FastAPI + Uvicorn

@@ -1,0 +1,19 @@
+# ไม่รวมไฟล์บันทึกทั้งหมด
+*.log 
+
+#ไม่เอาโฟลเดอร์ git history เข้า image
+.git
+.gitignore
+
+
+# Virtual environment
+.env
+.venv/
+venv/
+.env.
+.git
+_pycache__/
+*.pyc
+.vscode/
+
+

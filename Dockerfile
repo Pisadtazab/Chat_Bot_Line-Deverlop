@@ -2,15 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /code
 
-COPY ./requirements.txt /code/requirements.txt
+# copy requirements ก่อน เพื่อให้ docker cache layer นี้ไว้ ไม่ต้อง install ใหม่ทุกครั้งถ้า requirements ไม่เปลี่ยน
+COPY requirements.txt /code/requirements.txt
 
-# RUN pip install fastapi[standard]
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=1000 --upgrade pip
+RUN pip install --no-cache-dir --default-timeout=1000 -r /code/requirements.txt
 
+# copy โค้ดทีหลังสุด เปลี่ยนบ่อยที่สุด
 COPY ./app /code/app
 
-# เปิด port 8000
-EXPOSE 8000
+EXPOSE 5000
 
-# CMD ["fastapi", "run", "app/main.py", "--port", "8080"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"]

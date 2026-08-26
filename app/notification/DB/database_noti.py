@@ -7,8 +7,8 @@ from pymongo import MongoClient
 # เข้าถึงตัวแปลในไฟล์ .env เพื่อดึงมาใช้งานในไฟล์ ConnentDB.py แบบ Local
 load_dotenv()
 
-mogo_uri = os.getenv("MONGO_URI_LOCAL")
-client = MongoClient(mogo_uri)
+mogo_uri_locl = os.getenv("MONGO_URI_LOCAL")
+client = MongoClient(mogo_uri_locl)
 
 # Name entity db
 db = client["BORC"]

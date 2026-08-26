@@ -5,7 +5,8 @@ from gridfs import GridFS
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
 
-from DB.database import collection,db
+
+from app.DB.database import collection,db
 
 router = APIRouter()
 
@@ -23,7 +24,7 @@ async def get_files():
         files = collection.find()
         file_list = [{"file_name": file["metadata"]["source"], "file_id": str(file["_id"])} for file in files]
         return file_list
-    except Exception as e:
+    except Exception as e:   
         raise HTTPException(status_code=500, detail=str(e))
 
 

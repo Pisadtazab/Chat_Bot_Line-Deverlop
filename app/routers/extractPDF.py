@@ -1,8 +1,9 @@
-import fitz  # ให้ install PyMuPDF อ่านไฟล์ PDF, ดึงข้อความ
+# import fitz  # ให้ install PyMuPDF อ่านไฟล์ PDF, ดึงข้อความ
+import pymupdf
 from PIL import Image
 import io
 import numpy as np
-import unicodedata # Added for unicodedata.normalize
+
 from pythainlp.tokenize import word_tokenize # Added this import
 
 from typing import List, Dict, Tuple  # ✅ [แก้ไข] เพิ่ม Tuple สำหรับ return type ของ extract_pdf_content
@@ -96,7 +97,7 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
     คืนค่า: (content_chunks, summarized_text)
     """
     try:
-        doc = fitz.open(pdf_path)
+        doc = pymupdf.open(pdf_path)
         content_chunks = []
         all_text=[]
 

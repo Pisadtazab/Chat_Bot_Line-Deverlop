@@ -27,7 +27,7 @@ import json
 from app.response_message import response_message #ติดต่อกับการสร้างเงื่อนไขข้อความ
 # from app.chatbot import respond_to_message  #นำเข้าฟังก์ชั่น llm
 from app.retriever import query_rag ,respone_message_LLM,id_image,send_image
-from DB.database import collection,db
+from app.DB.database import collection,db
 
 
 from fastapi import HTTPException
@@ -124,7 +124,7 @@ handler = WebhookHandler(channel_secret=get_channel_secret)
 
 # animation chat
 
-def send_loading(chat_id, seconds=5):
+def send_loading(chat_id, seconds=15):
     """ สำหรับอนิเมชั่นตอนกำลังตอบกลับ """
     url = "https://api.line.me/v2/bot/chat/loading/start"
     headers = {
@@ -177,104 +177,50 @@ def handle_follow(event: FollowEvent):
             color="#FF4444"
         )
 
-
-
 @handler.add(MessageEvent, message=TextMessageContent)
-def handle_message(event: MessageEvent): #เงื่อนไขจัดการกับข้อความ
+def handle_message(event: MessageEvent):
     user_text = event.message.text
-    
-     # 1 ดึง userId สำหรับแสดงโหลด
     user_id = event.source.user_id
-    
 
-    # #  เช็คสถานะก่อน ถ้าไม่สมัครหยุดเลย ไม่ผ่าน RAG
-    # user = notify_collection.find_one({"userId": user_id})  
-    # if not user:
-    #     push_flex_notification(
-    #         user_id=user_id,
-    #         title="ยังไม่พบข้อมูลการสมัคร ❌",
-    #         message="กรุณาสมัครสมาชิกก่อนนะครับ",
-    #         color="#FF4444"
-    #     )
-    #     return  # ← หยุดตรงนี้ ไม่ไปต่อ RAG เลย
-        
-    
-    # 2 ส่งวงกลมกำลังโหลดไปก่อน
     send_loading(user_id, seconds=5)
-    # 3 ส่งข้อความนี้ไป query RAG หรือ DB และ  ดึงคำตอบจาก LLM (string)
-    answer, current_pdf_name  = query_rag(user_text)
 
-    
+    answer, current_pdf_name = query_rag(user_text)
+
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
-        
-        # เก็บข้อความเป็น  list
-        messages = []
-        
-        reply_message = response_message(event) # TextMessage, FlexMessage
-        
 
-        reply_message_AI =  respone_message_LLM(answer) # แปลง string เป็น TextMessage เพื่อส่งคำตอบ llm
+        messages = []
+
+        # 1 ข้อความคำตอบจาก LLM มาก่อนเสมอ (สำคัญที่สุด)
+        reply_message_AI = respone_message_LLM(answer)
         if reply_message_AI:
             messages.append(reply_message_AI)
-        
-        gridfs_ids = id_image(answer, collection,current_pdf_name)  # คืน list ของ ObjectId
-        line_image = send_image(gridfs_ids)
-        if line_image:
-            messages.extend(line_image) # ใส่ค่าที่ละตัวไม่เอวเป็นก้อน ใช้แทน append
 
-        if not reply_message:
+        # 2 ดึงรูปเท่าที่ slot เหลือ ไม่ให้เกิน LINE limit
+        MAX_LINE_MESSAGES = 5
+        remaining_slots = MAX_LINE_MESSAGES - len(messages)
+
+        if remaining_slots > 0:
+            gridfs_ids = id_image(answer, collection, current_pdf_name)
+            line_image = send_image(gridfs_ids)
+            if line_image:
+                messages.extend(line_image[:remaining_slots])
+
+            
+        messages = messages[:MAX_LINE_MESSAGES]
+
+        if not messages:
+            print(f"[WARN] no messages to reply for user_id={user_id}, text={user_text!r}")
             return None
-        
-        
+
         line_bot_api.reply_message(
             ReplyMessageRequest(
                 reply_token=event.reply_token,
-                # messages=[reply_message,reply_message_AI, line_image]
-                # messages=messages[:4]  # LINE จำกัด 3 บังคับให้ส่งได้แค่ 
                 messages=messages
             )
         )
         print(event)
 
-
-
-
-# # เทสการส่งข้อความ
-# import requests
-
-
-# ACCESS_TOKEN  = os.getenv("ACCESS_TOKEN")
-
-# user = notify_collection.find_one({"userId": user_id})  
-# def send_line_message(user_id, message: str):
-#     url = "https://api.line.me/v2/bot/message/push"
-    
-#     headers = {
-#         "Content-Type": "application/json",
-#         "Authorization": f"Bearer {ACCESS_TOKEN}"
-#     }
-    
-#     body = {
-#         "to": user_id,
-#         "messages": [
-#             {
-#                 "type": "text",
-#                 "text": message
-#             }
-#         ]
-#     }
-    
-#     response = requests.post(url, headers=headers, json=body)
-#     return response.status_code, response.json()
-
-# # ส่งหลายครั้ง
-# messages = ["แจ้งเตือนที่ 1"]
-
-# for msg in messages:
-#     status, result = send_line_message("U521b4c90449e6f574705dbbd70de11a7")
-#     print(f"Status: {status}, Result: {result}")
-
-
-# if __name__ == "__main__":
-#     uvicorn.run("main:app", host="5000")
+@app.get("/health")
+async def health():
+    return {"status": "ok"}

@@ -5,14 +5,13 @@ from gridfs import GridFS
 from fastapi import HTTPException
 from pymongo import MongoClient
 from sentence_transformers import SentenceTransformer
-from PIL import Image
+
+
 # import io
 import numpy as np
-from pythainlp.tokenize import word_tokenize # Added this import
-from bson.objectid import ObjectId
+
 from openai import OpenAI
 import re
-# import time
 
 
 # from linebot.models import ImageSendMessage
@@ -148,11 +147,13 @@ def query_rag(query_text):
     prompt = f"""จากบริบทต่อไปนี้ ตอบคำถาม: {query_text}
     # บริบท:
     # {context}
-    # หากมีชื่อไฟล์รูปภาพต้องให้แสดงคำอธิบายหรือ placeholder ของภาพ ให้ต่อสุดท้าย"""  #สั่งให้โชว์รูปภาพที่เกี่ยวข้องกับบริบท
+    # หากมีชื่อไฟล์รูปภาพต้องให้แสดงคำอธิบายหรือ placeholder ของภาพ ให้ต่อสุดท้าย 
+    # ถ้าถามถึงทั้งหมดหรือบ่งบอกจำนวน ไม่ต้องส่งรูปภาพแสดงคำอธิบายหรือ placeholder ของภาพ ต่อสุดท้าย"""  #สั่งให้โชว์รูปภาพที่เกี่ยวข้องกับบริบท
 
     typhoon_client = OpenAI(
         api_key= os.getenv("Typhoon_api_key"),
-        base_url="https://api.opentyphoon.ai/v1"
+        base_url="https://api.opentyphoon.ai/v1",
+        
     )
     
     # เรียกใช้ฟังก์ชั่น ระยะเวลารอ api
@@ -171,6 +172,7 @@ def query_rag(query_text):
 )
 
     llm_answer = response.choices[0].message.content
+    print(llm_answer)
     return llm_answer,current_pdf_name
 
 
@@ -244,8 +246,6 @@ def id_image(llm_answer, collection,current_pdf_name):
 
 
 
-
-
 def send_image(gridfs_ids):
     """ส่งรูปภาพผ่านไลน์ด้วย push"""
     
@@ -253,19 +253,19 @@ def send_image(gridfs_ids):
 
     try:
         if not ngrok_uri:
-            raise ValueError("NGROK_URI not set")
+            raise ValueError("NGROK_URL not set")
 
-        # ถ้า env มี https อยู่แล้วจะไม่ซ้ำ
+        # ถ้า env มี http/https อยู่แล้วจะไม่เติมซ้ำ
         if not ngrok_uri.startswith("http"):
             base_url = f"https://{ngrok_uri}"
         else:
             base_url = ngrok_uri
 
-        images = []
+        base_url = base_url.rstrip("/")
 
+        images = []
         for file_id in gridfs_ids:
             url = f"{base_url}/image/{file_id}"
-
             images.append(
                 ImageMessage(
                     original_content_url=url,
@@ -275,4 +275,4 @@ def send_image(gridfs_ids):
 
         return images
     except Exception as e:
-        print("ไม่มีรูปภาพส่ง")
+        print(f"ไม่มีรูปภาพส่ง {e}")

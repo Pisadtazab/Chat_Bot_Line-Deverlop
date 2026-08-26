@@ -1,5 +1,5 @@
 from fastapi import APIRouter ,HTTPException,Depends
-from DB.database import delete_pdf_from_db,collection,db
+from app.DB.database import delete_pdf_from_db,collection,db
 from fastapi.responses import HTMLResponse, JSONResponse
 import re
 
