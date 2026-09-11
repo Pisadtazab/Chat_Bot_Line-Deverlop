@@ -18,5 +18,3 @@ __pycache__/
 # logs
 *.log
 
-*.docker-compose.yml
-*.Dockerfile

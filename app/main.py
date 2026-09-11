@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 import uvicorn
 
@@ -14,14 +16,14 @@ from linebot.v3.messaging import (
     ApiClient, 
     MessagingApi, 
     Configuration, 
-    ReplyMessageRequest, 
-    TextMessage, 
+    PushMessageRequest,
+    TextMessage,
+    # ReplyMessageRequest, 
     # FlexMessage, 
     # Emoji,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import requests
-import json
 
 
 from app.response_message import response_message #ติดต่อกับการสร้างเงื่อนไขข้อความ
@@ -120,6 +122,18 @@ get_channel_secret = get_secret_value('CHANNEL_SECRET')
 configuration = Configuration(access_token=get_access_token)
 handler = WebhookHandler(channel_secret=get_channel_secret)
 
+logger = logging.getLogger(__name__)
+
+# A lock per LINE user keeps replies in the same order as incoming messages,
+# while still allowing different users to be handled concurrently.
+user_message_locks: dict[str, asyncio.Lock] = {}
+
+# LINE can retry a webhook when it does not receive a prompt 2xx response.
+# Keep the event IDs already accepted by this process so a retry does not
+# generate a duplicate answer.
+processed_webhook_event_ids: set[str] = set()
+MAX_PROCESSED_EVENT_IDS = 10_000
+
 
 
 # animation chat
@@ -136,9 +150,11 @@ def send_loading(chat_id, seconds=15):
         "loadingSeconds": seconds
     }
 
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
-    print("Status:", response.status_code)
-    print("Response:", response.text)
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.exception("Unable to start LINE loading animation for user_id=%s", chat_id)
     
 # ตอบกลับ line dev
 @app.post("/callback")
@@ -146,15 +162,36 @@ async def callback(request: Request, x_line_signature: str = Header(None,alias="
     body = await request.body()
     body_str = body.decode('utf-8')
     try:
-        handler.handle(body_str, x_line_signature)
+        # Parse here only to verify LINE's signature and obtain the events.
+        # Do not call handler.handle(): it runs the RAG/LLM synchronously and
+        # makes LINE wait for the whole answer before receiving HTTP 200.
+        payload = handler.parser.parse(body_str, x_line_signature, as_payload=True)
     except InvalidSignatureError:
-        print("Invalid signature. Please check your channel access token/channel secret.")
+        logger.warning("Rejected LINE webhook with an invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature.")
 
+    for event in payload.events:
+        if isinstance(event, MessageEvent) and isinstance(event.message, TextMessageContent):
+            event_id = getattr(event, "webhook_event_id", None)
+            if event_id and event_id in processed_webhook_event_ids:
+                logger.info("Ignored duplicate LINE webhook event_id=%s", event_id)
+                continue
+
+            if event_id:
+                processed_webhook_event_ids.add(event_id)
+                if len(processed_webhook_event_ids) > MAX_PROCESSED_EVENT_IDS:
+                    # This is only a bounded in-memory retry guard. For multiple
+                    # application instances, store event IDs in Redis/MongoDB.
+                    processed_webhook_event_ids.clear()
+
+            asyncio.create_task(queue_message_for_user(event))
+        elif isinstance(event, FollowEvent):
+            asyncio.create_task(asyncio.to_thread(handle_follow, event))
+
+    # LINE receives 200 immediately; all slow work continues in the background.
     return PlainTextResponse("OK", status_code=200)
 
 
-@handler.add(FollowEvent)
 def handle_follow(event: FollowEvent):
     messaging_user_id = event.source.user_id
     print(f"LINE userId: {messaging_user_id}")
@@ -177,12 +214,11 @@ def handle_follow(event: FollowEvent):
             color="#FF4444"
         )
 
-@handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event: MessageEvent):
     user_text = event.message.text
     user_id = event.source.user_id
 
-    send_loading(user_id, seconds=5)
+    send_loading(user_id, seconds=20)
 
     answer, current_pdf_name = query_rag(user_text)
 
@@ -213,13 +249,34 @@ def handle_message(event: MessageEvent):
             print(f"[WARN] no messages to reply for user_id={user_id}, text={user_text!r}")
             return None
 
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=messages
+        # A reply token is short-lived. This message may have waited behind an
+        # earlier request from the same user, so use Push API instead.
+        # line_bot_api.reply_message(
+        #     ReplyMessageRequest(
+        #         reply_token=event.reply_token,
+        #         messages=messages,
+        #     )
+        # )
+        line_bot_api.push_message(
+            PushMessageRequest(
+                to=user_id,
+                messages=messages,
             )
         )
         print(event)
+
+
+async def queue_message_for_user(event: MessageEvent):
+    """Run blocking RAG work outside the webhook and serialize it per user."""
+    user_id = event.source.user_id
+    lock = user_message_locks.setdefault(user_id, asyncio.Lock())
+
+    async with lock:
+        try:
+            await asyncio.to_thread(handle_message, event)
+        except Exception:
+            # Do not let a failed request stop later messages from this user.
+            logger.exception("Failed to process LINE message for user_id=%s", user_id)
 
 @app.get("/health")
 async def health():

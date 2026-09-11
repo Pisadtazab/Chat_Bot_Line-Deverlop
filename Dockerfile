@@ -13,4 +13,6 @@ COPY ./app /code/app
 
 EXPOSE 5000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"]
+# The webhook queue is maintained in this process. Keep one worker so messages
+# from the same LINE user always reach the same per-user queue.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "1"]

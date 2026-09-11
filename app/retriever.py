@@ -87,12 +87,12 @@ def query_rag(query_text):
     question_embedding = sentence_model.encode(query_text).tolist()
 
     # --- 2) กำหนดจำนวนผลลัพธ์ตามคำถาม ---
-    max_result = 3
+    # max_result = 3
     
-    if "กี่" in query_text or "บ้าง" in query_text:
-        max_result = 5
-    if "ทั้งหมด" in query_text:
-        max_result = 10
+    # if "กี่" in query_text or "บ้าง" in query_text:
+    #     max_result = 5
+    # if "ทั้งหมด" in query_text:
+    #     max_result = 15
 
     
     # --- 3) MongoDB vector search ---
@@ -103,7 +103,7 @@ def query_rag(query_text):
                 "path": "embedding",
                 "queryVector": question_embedding,
                 "numCandidates": 100,
-                "limit": max_result
+                "limit": 50
             }
         },
         {
