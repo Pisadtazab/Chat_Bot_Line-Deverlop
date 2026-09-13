@@ -28,7 +28,7 @@ LINE Chatbot ที่ใช้ RAG (Retrieval-Augmented Generation) พร้�
 - **MongoDB + GridFS** — จัดเก็บข้อมูล, Embeddings และไฟล์รูปภาพ
 - **LINE Flex Message Notification** — แจ้งเตือนคิว/นัดหมายแบบ Push Message ให้ทั้งนักศึกษาและอาจารย์
 - **Cloudflare Tunnel** — เปิด HTTPS URL สาธารณะสำหรับ LINE Webhook ที่ `/callback`
-- **Docker Compose** — Deploy ง่ายด้วย Nginx + ngrok (dev mode)
+- **Docker Compose** — Run FastAPI with one selected tunnel profile (Cloudflared or ngrok)
 
 ---
 
@@ -101,7 +101,7 @@ Chat_Bot_Line-Deverlop/
 ├── templates/
 │   └── index.html                       # หน้า Admin UI จัดการ PDF
 ├── Dockerfile                           # Python 3.12 + FastAPI + Uvicorn
-├── docker-compose.yml                   # Services: Nginx + ngrok (dev)
+├── docker-compose.yml                   # FastAPI + optional Cloudflared/ngrok profile
 ├── requirements.txt                     # Python dependencies
 └── .env                                 # ตัวแปรลับ (ไม่ commit)
 ```
@@ -119,7 +119,7 @@ Chat_Bot_Line-Deverlop/
 | **LINE** | line-bot-sdk v3, LINE Flex Message Push API |
 | **Tunnel (Production)** | Cloudflare Tunnel (cloudflared) |
 | **Tunnel (Dev)** | ngrok |
-| **Deployment** | Docker, Docker Compose, Nginx |
+| **Deployment** | Docker, Docker Compose |
 | **Language** | Python 3.12 |
 
 ---
@@ -425,7 +425,18 @@ The endpoint returns the generated `summary` together with its success message. 
 Shared LINE Flex Message code lives in `app/notification/helpers/flex.py`.
 It builds the common header, body, footer, and LINE Push API request; notification routers provide only their endpoint and task-specific fields.
 
+```
+app/notification/
+├── helpers/flex.py    # shared Flex payload builder and LINE Push client
+├── routers/           # shared notification routes
+└── users/             # task-specific notification endpoints
+```
+
 Docker Compose tunnels are opt-in profiles: run either `docker compose --profile cloudflared up -d` or `docker compose --profile ngrok up -d`.
+
+## Verification
+
+Run `python -m unittest discover -s tests -v`, then validate the Compose configuration with `docker compose config --profiles`.
 
 Example response:
 
