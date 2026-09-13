@@ -82,6 +82,8 @@ Chat_Bot_Line-Deverlop/
 │   ├── notification/                    # 🔔 ระบบแจ้งเตือน LINE
 │   │   ├── DB/
 │   │   │   └── database_noti.py         # MongoDB connection สำหรับ BORC/UserProfile
+│   │   ├── helpers/
+│   │   │   └── flex.py                  # สร้าง Flex header/body/footer และส่ง LINE Push API
 │   │   ├── routers/
 │   │   │   ├── line_notify.py           # push_flex_notification() + /CancelBooking
 │   │   │   └── GetLine_id.py            # /NotifyFristLogin/UserLine_id
@@ -424,6 +426,10 @@ The endpoint returns the generated `summary` together with its success message. 
 
 Shared LINE Flex Message code lives in `app/notification/helpers/flex.py`.
 It builds the common header, body, footer, and LINE Push API request; notification routers provide only their endpoint and task-specific fields.
+
+`flex_row(label, value, ...)` สร้างหนึ่งแถวในส่วน body ของ Flex Message และตั้งค่า `wrap`, สี, และน้ำหนักข้อความเฉพาะแถวนั้นได้
+ส่วน `send_flex_notification(user_id, title, color, body, ...)` ประกอบ bubble ส่วน header/body/footer, อ่าน `ACCESS_TOKEN`, และส่ง Push Message ไปยัง LINE API
+ดังนั้นแต่ละ router ส่งเฉพาะผู้รับ หัวข้อ สี และ fields ของงานเป็นรายการ `flex_row(...)` โดยไม่สร้าง payload หรือเรียก `requests.post()` เอง
 
 ```
 app/notification/
