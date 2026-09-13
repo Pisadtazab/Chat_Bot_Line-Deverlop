@@ -167,6 +167,55 @@ docker compose --profile cloudflared up -d
 # หรือ: docker compose --profile ngrok up -d
 ```
 
+### Docker build
+
+ทำตามลำดับนี้จากโฟลเดอร์ root ของโปรเจกต์
+
+**1. เตรียม `.env`**
+
+ตั้งค่าอย่างน้อย `ACCESS_TOKEN`, `CHANNEL_SECRET`, `MONGO_URI`, `MONGO_URI_LOCAL` และเพิ่ม `NGROK_TOKEN` เฉพาะเมื่อเลือก ngrok
+
+**2. Build FastAPI image**
+
+```bash
+# build ทุก service ที่มี Dockerfile (ปัจจุบันคือ app)
+docker compose build
+
+# หรือ build เฉพาะ FastAPI container
+docker compose build app
+```
+
+หากต้องการ build ใหม่ทั้งหมดโดยไม่ใช้ cache ให้ใช้ `docker compose build --no-cache app`
+
+**3. เริ่ม app และเลือก tunnel หนึ่งตัว**
+
+```bash
+# Cloudflare Tunnel
+docker compose --profile cloudflared up -d
+
+# หรือ ngrok
+docker compose --profile ngrok up -d
+```
+
+`cloudflared` และ `ngrok` ใช้ image สำเร็จรูป จึงถูก pull ในขั้นนี้และไม่มีขั้นตอน build แยก
+
+**4. ตรวจสอบสถานะและ log**
+
+```bash
+docker compose ps
+docker compose logs -f app
+```
+
+เมื่อ app healthy ให้เปิด `http://localhost:5000/health`; ถ้าใช้ ngrok เปิด dashboard ที่ `http://localhost:4040`
+
+**5. หยุดระบบ**
+
+```bash
+docker compose down
+```
+
+คำสั่งนี้หยุดและลบ containers ของโปรเจกต์ที่กำลังทำงานอยู่ทั้งหมด ได้แก่ `app` และ tunnel ที่เลือกไว้ (`cloudflared` หรือ `ngrok`) แต่ไม่ลบ volume `huggingface_cache`
+
 ---
 
 ## 🔑 ตัวแปรสภาพแวดล้อม
