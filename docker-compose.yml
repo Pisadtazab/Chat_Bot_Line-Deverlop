@@ -1,0 +1,51 @@
+services:
+  app:
+    build: .
+    env_file:
+      - ./.env
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+    # เช็คสถนะ contrainer app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 10s      # เช็คทุกๆ 10 วินาที
+      timeout: 5s        # รอ response ไม่เกิน 5 วินาที ถ้าเกินถือว่า fail
+      retries: 5         # ลองเช็คซ้ำได้สูงสุด 5 ครั้งก่อนตัดสินว่า unhealthy
+      start_period: 60s  # ช่วง 60 วิแรกหลัง start ไม่นับ fail (ให้เวลาโหลด model ก่อน)
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    profiles: ["cloudflared"]
+    #รอ contrainer app service cloudflared
+    depends_on:
+      app:
+        condition: service_healthy
+    command: tunnel --url http://app:5000
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    profiles: ["ngrok"]
+    #รอ contrainer app service ngrok
+    depends_on:
+      app:
+        condition: service_healthy
+    # command ngrok http 5000
+    command:
+      - "http"
+      - "app:5000"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_TOKEN}
+    ports:
+      - 4040:4040
+    env_file:
+      - ./.env
+    restart: unless-stopped
+
+volumes:
+  huggingface_cache:

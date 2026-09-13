@@ -1,0 +1,84 @@
+extractPDF.py: PDF upload and RAG ingestion flow
+=================================================
+
+Purpose
+-------
+`app/routers/extractPDF.py` receives a PDF, turns its pages and images into
+searchable records, creates a Thai summary, and stores the searchable records
+in MongoDB and GridFS. It does not answer chat messages itself.
+
+Startup
+-------
+When FastAPI imports this router, the file loads:
+- BAAI/bge-m3: creates embeddings for PDF text and image descriptions.
+- StelleX/mt5-base-thaisum-text-summarization: creates a Thai document summary.
+- The selected Torch device: CUDA when available, otherwise CPU.
+
+Upload flow: POST /upload_pdf
+------------------------------
+
+  Client uploads a .pdf
+          |
+          v
+  Validate filename ends with .pdf
+          |
+          v
+  Save file to app/src/<filename>
+          |
+          v
+  extract_pdf_content(save_path)
+          |
+          +--> Open PDF with PyMuPDF
+          |       |
+          |       +--> For every page
+          |       |       |
+          |       |       +--> Extract and clean text with FixThaiPDF
+          |       |       +--> Extract images and make a description
+          |       |       +--> Add image placeholders to that page's text
+          |       |       +--> Build one content chunk for the page
+          |       |
+          |       +--> Combine all page text
+          |       +--> Tokenize Thai text when Thai characters exist
+          |       +--> summarize_content(...)
+          |               |
+          |               +--> T5 tokenizer (maximum 1024 input tokens)
+          |               +--> MT5 generate() produces the summary
+          |
+          +--> Returns: (content_chunks, summary)
+          |
+          v
+  store_in_mongodb(content_chunks, filename)
+          |
+          +--> For every text chunk
+          |       +--> Create BAAI/bge-m3 embedding
+          |       +--> Store content, metadata, and embedding in MongoDB
+          |
+          +--> For every extracted image
+                  +--> Store original bytes in GridFS
+                  +--> Create an embedding from its description
+                  +--> Store image metadata, GridFS id, and embedding in MongoDB
+          |
+          v
+  Return JSON: message + summary
+
+Example response
+----------------
+{
+  "message": "research.pdf uploaded and processed",
+  "summary": "Generated Thai summary"
+}
+
+How this relates to chat RAG
+----------------------------
+
+  Stored page/image chunks --> retriever.py --> MongoDB Vector Search
+                                      |
+                                      v
+                            Typhoon LLM creates chat answer
+                                      |
+                                      v
+                                  LINE response
+
+The summary is returned to the caller of /upload_pdf. It is not currently
+stored as a vector-search record and is not sent to Typhoon when answering a
+chat message. RAG searches the stored page and image chunks instead.
