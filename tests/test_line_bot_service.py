@@ -27,6 +27,7 @@ def make_service(**overrides):
 def message_event(user_id="U1", text="hello", event_id=None):
     return SimpleNamespace(
         webhook_event_id=event_id,
+        reply_token="reply-token",
         source=SimpleNamespace(user_id=user_id),
         message=SimpleNamespace(text=text),
     )
@@ -48,7 +49,7 @@ class LineBotServiceTests(unittest.TestCase):
         self.assertTrue(service.accept_event(message_event(event_id="event-3")))
         self.assertTrue(service.accept_event(first))
 
-    def test_message_push_contains_text_and_at_most_four_images(self):
+    def test_message_reply_contains_text_and_at_most_four_images(self):
         images = [
             ImageMessage(
                 original_content_url=f"https://example.com/{index}.jpg",
@@ -68,8 +69,8 @@ class LineBotServiceTests(unittest.TestCase):
             service.process_message(message_event())
 
         service.start_loading.assert_called_once_with("U1")
-        request = messaging_api.return_value.push_message.call_args.args[0]
-        self.assertEqual(request.to, "U1")
+        request = messaging_api.return_value.reply_message.call_args.args[0]
+        self.assertEqual(request.reply_token, "reply-token")
         self.assertEqual(len(request.messages), 5)
         self.assertIsInstance(request.messages[0], TextMessage)
 
