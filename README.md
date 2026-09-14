@@ -143,6 +143,14 @@ Chat_Bot_Line-Deverlop/
 git clone https://github.com/Pisadtazab/Chat_Bot_Line-Deverlop.git
 cd Chat_Bot_Line-Deverlop
 ```
+**ติดตั้ง environment (venv)**
+```
+py -3.12 -m venv .venv
+```
+```
+cd app
+run .venv\Scripts\activate
+```
 
 **2. สร้างไฟล์ `.env`**
 
