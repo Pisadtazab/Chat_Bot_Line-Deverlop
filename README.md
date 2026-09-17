@@ -148,8 +148,11 @@ cd Chat_Bot_Line-Deverlop
 py -3.12 -m venv .venv
 ```
 ```
-cd app
-run .venv\Scripts\activate
+install .venv\Scripts\activate
+```
+**run server uvicorn**
+```
+run uvicorn app.main:app --port 5000 --reload
 ```
 
 **2. สร้างไฟล์ `.env`**
@@ -478,6 +481,35 @@ This project is open source.
 4. Create BAAI/bge-m3 embeddings for text and image descriptions, then store them in MongoDB and GridFS.
 
 The endpoint returns the generated `summary` together with its success message. The RAG query path remains unchanged: it searches the stored page and image chunks, not the summary.
+
+## CPU / GPU for PDF processing
+
+The current default is **CPU**. In `app/routers/extractPDF.py`, this one setting applies to both local AI models:
+
+| Task | Uses CPU now | Use GPU when |
+| --- | --- | --- |
+| Extract PDF text and images (PyMuPDF), Thai tokenization, and MongoDB/GridFS storage | Yes | Never needed; these libraries do not use CUDA here. |
+| Create embeddings with `BAAI/bge-m3` | Yes | Uploading large documents or many documents concurrently. |
+| Summarize text with `mt5-base-thaisum-text-summarization` | Yes | Summaries are slow, especially for long PDFs. |
+| Answer via Typhoon AI | Your machine does not run this model; it is an API call. | Not applicable. |
+
+CPU keeps GPU memory available and is suitable for occasional PDF uploads. GPU is faster for the two model tasks above, but requires a CUDA-compatible PyTorch installation and enough VRAM.
+
+### Switch the PDF models to GPU
+
+Edit `app/routers/extractPDF.py` and replace:
+
+```python
+device = torch.device("cpu")
+```
+
+with:
+
+```python
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+Restart the FastAPI application. It will use GPU when CUDA is available, otherwise safely fall back to CPU. Confirm the selected device from the startup log: `U sing device: cuda` or `Using device: cpu`.
 
 ## Notification helpers
 

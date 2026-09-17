@@ -6,12 +6,11 @@ from typing import Any
 
 import requests
 from linebot.v3 import WebhookHandler
-from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, ReplyMessageRequest
+from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, ReplyMessageRequest,PushMessageRequest
 from linebot.v3.webhooks import FollowEvent, MessageEvent, TextMessageContent
 
 logger = logging.getLogger(__name__)
 MAX_LINE_MESSAGES = 5
-
 
 class LineBotService:
     """Owns LINE webhook parsing, message ordering, and Push API delivery."""
@@ -115,8 +114,8 @@ class LineBotService:
             return
 
         with ApiClient(self.configuration) as api_client:
-            MessagingApi(api_client).reply_message(
-                ReplyMessageRequest(replyToken=event.reply_token, messages=messages)
+            MessagingApi(api_client).push_message(
+                PushMessageRequest(to=user_id, messages=messages)
             )
 
     async def queue_message_for_user(self, event: MessageEvent) -> None:

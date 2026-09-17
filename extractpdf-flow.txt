@@ -26,7 +26,7 @@ Upload flow: POST /upload_pdf
   Save file to app/src/<filename>
           |
           v
-  extract_pdf_content(save_path)
+  extract_pdf_content(save_path) 
           |
           +--> Open PDF with PyMuPDF
           |       |

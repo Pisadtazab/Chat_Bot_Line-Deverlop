@@ -3,24 +3,21 @@ import pymupdf
 from PIL import Image
 import io
 import numpy as np
+import requests
 
-from pythainlp.tokenize import word_tokenize # Added this import
+from pythainlp.tokenize import word_tokenize  # Added this import
 
-from typing import List, Dict, Tuple  
-import torch #ใช้กับโมเดลสรุปข้อความ
-from transformers import T5Tokenizer, MT5ForConditionalGeneration #สรุปข้อความ (summarization)
+from typing import List, Dict, Tuple
 
 from fixthaipdf import clean
 
-from sentence_transformers import SentenceTransformer
 from pymongo.mongo_client import MongoClient
-import gridfs #เก็บที่อยู่รูปภาพ
+import gridfs  # เก็บที่อยู่รูปภาพ
 from dotenv import load_dotenv
-
 
 import os
 
-from fastapi import APIRouter ,HTTPException,UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 import shutil
 
 
@@ -32,55 +29,81 @@ router = APIRouter()
 load_dotenv(override=True)
 
 
-# ใช้การด์จอ
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(" Using device:", device)
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 
+# ✅ [แก้ไข] เปลี่ยน endpoint จาก api-inference.huggingface.co -> router.huggingface.co/hf-inference
+# เดิม: https://api-inference.huggingface.co/... -> HF ปิด domain นี้ไปแล้ว (DNS resolve ไม่เจอ / 410 Gone)
+EMBED_MODEL_URL = (
+    "https://router.huggingface.co/hf-inference/models/"
+    "BAAI/bge-m3/pipeline/feature-extraction"
+)
 
-# ✅ [แก้ไข] โหลด SentenceTransformer ครั้งเดียวตอนเริ่มโปรแกรม แทนที่จะโหลดซ้ำทุกครั้งที่เรียก embed_text
-# เดิม: โหลดในฟังก์ชัน embed_text ทำให้โหลดโมเดลใหม่ทุก call → ช้ามาก และเปลือง memory
-MODEL_NAME = "BAAI/bge-m3"
-sentence_model = SentenceTransformer(MODEL_NAME, device=device)
+HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
+#       เป็น LLM ตัวใหญ่ พร้อมใช้งานแน่นอน ไม่มีปัญหาเรื่อง catalog แบบ HF
+from openai import OpenAI
 
-# ใช้แปลงข้อความ เป็น token
-sum_tokenizer = T5Tokenizer.from_pretrained('StelleX/mt5-base-thaisum-text-summarization')
+typhoon_client = OpenAI(
+    api_key=os.getenv("Typhoon_api_key"),
+    base_url="https://api.opentyphoon.ai/v1",
+    timeout=45.0,
+    max_retries=2,
+)
 
-# โมเดลที่รับข้อความ (sequence หนึ่ง) แล้วสร้างข้อความใหม่ (อีก sequence หนึ่ง) หรือ การแปลงจาก token มาเป็นข้อความใหม่
-sum_model = MT5ForConditionalGeneration.from_pretrained('StelleX/mt5-base-thaisum-text-summarization').to(device)
+def embed_text(text: str) -> List[float]:
+    """
+    สร้าง embedding ผ่าน Hugging Face Inference API (BAAI/bge-m3)
+    คืนค่า vector 1024 มิติ normalize 
+    """
+    print("-------------- start embed text (HF API) -------------------")
+
+    payload = text.strip()
+
+    response = requests.post(
+        EMBED_MODEL_URL,
+        headers=HF_HEADERS,
+        json={"inputs": payload},
+        timeout=60,
+    )
+
+    if response.status_code == 200:
+        arr = np.array(response.json(), dtype=np.float32)
+        while arr.ndim > 1:          # รองรับทั้ง token-level และ batch
+            arr = arr.mean(axis=0)
+        norm = np.linalg.norm(arr)
+        return (arr / norm).tolist() if norm > 0 else arr.tolist()
+
+    print(f"HF embedding API error: {response.status_code} {response.text}")
 
 
 def summarize_content(content: str) -> str:
     """
-        สรุปเนื้อหา
+    สรุปเนื้อหา โดยเรียกผ่าน Typhoon API (chat completion)
+    แทนการรัน MT5 ในเครื่องหรือเรียกผ่าน HF Inference API
     """
     print("%%%%%%%%%%%%%% SUMMARY %%%%%%%%%%%%%%%%%%%%%")
 
-    # Check if content is empty or too short
-    if not content or len(content.strip()) < 50: # Arbitrary minimum length
+    if not content or len(content.strip()) < 50:
         print("Content is too short for summarization.")
         return "ไม่สามารถสรุปเนื้อหาได้เนื่องจากเนื้อหาสั้นเกินไป"
 
-    # ขั้นตอนเตรียมข้อความให้โมเดลสรุป
-    # Ensure input_ids are within the model's max length
-    input_ = sum_tokenizer(content, truncation=True, max_length=1024, return_tensors="pt")
-    # PyTorch ใช้เพื่อ บอกว่าเราไม่ต้องคำนวณ gradient ต้องการดูผลลัพธ์ ข้อดีไม่เปลือง memery
-    with torch.no_grad():
-      # สร้างข้อความใหม่
-        preds = sum_model.generate(
-            input_['input_ids'].to(device), #token ของข้อความ input, ส่งไปยัง CPU
-            # ✅ [แก้ไข] เพิ่ม attention_mask เพื่อให้โมเดลรู้ว่า token ไหนควรสนใจ
-            # เดิม: ไม่ได้ส่ง attention_mask ทำให้โมเดลอาจ attend ไปที่ padding token ด้วย
-            attention_mask=input_['attention_mask'].to(device),
-            num_beams=15,  # ค้นหา sequence ที่ดีที่สุดโดยพิจารณา 4 ทางเลือกพร้อมกัน (จำนวนมากขึ้น → แม่นขึ้นแต่ช้า)
-            num_return_sequences=1, # โมเดลจะ generate แค่ 1 ข้อความสรุป
-            no_repeat_ngram_size=3, # ป้องกัน ซ้ำคำ/วลี 3 ตัวติดกัน ในสรุป
-            remove_invalid_values=True, # ลบค่า token หรือผลลัพธ์ที่โมเดลสร้างไม่ถูกต้องออก
-            max_length=300, # ปรับความยาวสรุปข้อความ จำกัดจำนวน token ของ ข้อความสรุป สูงสุด 500 token
-            early_stopping=True # ถ้าโมเดลพบ token end-of-sequence จะหยุด generate ทันที ไม่ต้องรอจนเต็ม max_length
-        )
+    # จำกัดความยาว input กันข้อความยาวเกินไป (กัน token เกิน context window / ค่าใช้จ่ายบาน)
+    truncated_content = content[:6000]
 
-    summary = sum_tokenizer.decode(preds[0], skip_special_tokens=True)
+    try:
+        response = typhoon_client.chat.completions.create(
+            model="typhoon-v2.5-30b-a3b-instruct",
+            messages=[
+                {"role": "system", "content": "คุณเป็นผู้เชี่ยวชาญด้านการสรุปเนื้อหาภาษาไทย สรุปให้กระชับ ครอบคลุมประเด็นสำคัญ ความยาวไม่เกิน 5-8 ประโยค"},
+                {"role": "user", "content": f"สรุปเนื้อหาต่อไปนี้:\n\n{truncated_content}"},
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+        summary = response.choices[0].message.content
+    except Exception as e:
+        print(f"Typhoon summarization API error: {e}")
+        raise HTTPException(502, f"Summarization API error: {e}")
 
     print(f" summary: {summary}.")
     print("%%%%%%%%%%%%%% SUMMARY %%%%%%%%%%%%%%%%%%%%%")
@@ -88,8 +111,6 @@ def summarize_content(content: str) -> str:
 
 
 # แยกเนื้อหา, รูป ออกจาก PDF เก็บเป็น list ภายใน chunk เดียวเดียวกัน
-# ✅ [แก้ไข] เปลี่ยน return type เป็น Tuple[List[Dict], str] เพื่อ return ทั้ง chunks และ summary
-# เดิม: ใช้ global variable "summarize" ซึ่งเป็น anti-pattern
 def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
     """
     แยกข้อความและรูปภาพจาก PDF โดยใช้ PyMuPDF
@@ -98,7 +119,7 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
     try:
         doc = pymupdf.open(pdf_path)
         content_chunks = []
-        all_text=[]
+        all_text = []
 
         # วนลูป ทีละหน้าของ pdf สร้าง chunk ทีละหน้า
         for page_num in range(len(doc)):
@@ -107,9 +128,7 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
             # ทำความสะอาด pdf
             text = clean(page.get_text("text"))
 
-
             # Extract text
-            # text = page.get_text("text").strip()
             all_text.append(f"{text} \n\n\n")
 
             if not text:
@@ -117,14 +136,12 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
 
             print("################# Text data ##################")
 
-            # Simplified chunk_data creation
-            # chunk_data = {"text": f"ข้อมูลจากหน้า {page_num + 1} : {text}" , "images": []}
             # รวบรวมข้อความของหน้า PDF แต่ละหน้า
             chunk_data = {
-                  "text": f"ข้อมูลจากหน้า {page_num + 1} : {text}",
-                  "images": [], #ทำให้รู้ว่า ภาพนี้ มาจากหน้าที่ไหน เก็บภาพใน list
-                  "page": page_num + 1
-              }
+                "text": f"ข้อมูลจากหน้า {page_num + 1} : {text}",
+                "images": [],  # ทำให้รู้ว่า ภาพนี้ มาจากหน้าที่ไหน เก็บภาพใน list
+                "page": page_num + 1
+            }
             # Extract images
             image_list = page.get_images(full=True)
             print("################# images list ##################")
@@ -150,7 +167,7 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
 
                     })
 
-                      # เพิ่ม placeholder ใน text
+                    # เพิ่ม placeholder ใน text
                     chunk_data["text"] += f"\n[ภาพ: pic_{page_num+1}_{img_index+1}.{image_ext}]"
 
                 except Exception as e:
@@ -160,25 +177,22 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
                 content_chunks.append(chunk_data)
 
         doc.close()
-        content_text= "".join(all_text)
+        content_text = "".join(all_text)
 
         # ตัดคำภาษาไทย
-        # Added a check for Thai characters before tokenizing
-        thaitoken_text = preprocess_thai_text(content_text) if any(ord(c) >= 0x0E00 and ord(c) <= 0x0E7F for c in content_text) else content_text
+        thaitoken_text = preprocess_thai_text(content_text) if any(0x0E00 <= ord(c) <= 0x0E7F for c in content_text) else content_text
         print("################################")
         print(f"{ thaitoken_text }")
         print("################################")
 
-        # ✅ [แก้ไข] เปลี่ยนจาก global variable มาเป็น local variable แล้ว return ออกไปแทน
-        # เดิม: global summarize = summarize_content(thaitoken_text) → ใช้ global ใน function เป็น anti-pattern
         summary = summarize_content(thaitoken_text)
 
-        # ✅ [แก้ไข] return ทั้ง content_chunks และ summarize ออกไปพร้อมกัน
         return content_chunks, summary
 
     except Exception as e:
         print("เกิดข้อผิดพลาดในการแยก PDF: %s", str(e))
         raise
+
 
 # ตัดคำภาษาไทย ก่อนรวมข้อความ
 def preprocess_thai_text(text: str) -> str:
@@ -194,37 +208,14 @@ def preprocess_thai_text(text: str) -> str:
     return " ".join(word_tokenize(text, engine="newmm"))
 
 
-def embed_text(text: str) -> np.ndarray:
-    """
-    สร้าง embedding สำหรับข้อความโดยใช้ SentenceTransformer
-
-    Args:
-        text (str): ข้อความที่ต้องการสร้าง embedding
-
-    Returns:
-        np.ndarray: Embedding vector ที่รวมจากหลายโมเดล
-    """
-    print("-------------- start embed text  -------------------")
-
-    # ตัดคำภาษาไทย
-    processed_text = preprocess_thai_text(text) if any(ord(c) >= 0x0E00 and ord(c) <= 0x0E7F for c in text) else text
-
-
-    # สร้าง embedding ด้วย SentenceTransformer
-    # The 'device' variable is not defined globally. Assuming it should be 'cpu' for general use.
-    sentence_embedding = sentence_model.encode(processed_text, normalize_embeddings=True)
-
-    return sentence_embedding
-
-
 def store_in_mongodb(content_chunks: List[Dict], pdf_name: str):
     """
     เก็บข้อมูลข้อความและรูปภาพใน MogoDb พร้อม embedding
     """
     print("##### Start store in mogodb atlas #########")
-     # MongoDB configuration
-    mogo_uri = os.getenv("MONGO_URI")
-    client = MongoClient(mogo_uri )
+    # MongoDB configuration
+    mongo_uri = os.getenv("MONGO_URI")
+    client = MongoClient(mongo_uri)
 
     # NameNentity db
     db = client["employee_research_db"]
@@ -232,7 +223,6 @@ def store_in_mongodb(content_chunks: List[Dict], pdf_name: str):
     data_images = gridfs.GridFS(db)
 
     print("Connected to MongoDB Atlas")
-
 
     for chunk in content_chunks:
         text = chunk["text"]
@@ -246,64 +236,46 @@ def store_in_mongodb(content_chunks: List[Dict], pdf_name: str):
         text_document = {
             "content": text,
             "metadata": {"type": "text", "source": pdf_name, "page": chunk['page']},
-            "embedding": text_embedding.tolist()
+            "embedding": text_embedding
         }
         collection.insert_one(text_document)
 
         print("################# images embeding store ##################")
 
         print(f"images: {images} ")
-       # เก็บ images ลงฐานข้อมล Mongo db ไม้ได้นำรูปภาพมาแปลงเป็น vector
-       # idx คือ คือเลขลำดับประกอบกับรูปภาพในรูปแบบ list จะเริ่มนับจาก index 1
-        for  idx, img in enumerate(chunk["images"], start=1):
-            # image_uid ทำหน้าที่เป็นรหัสเฉพาะของรูปภาพ 1 รูป ในระบบทั้งหมด เพื่อคุมตัว หน้าที่เท่าไหร่(page) และ รูปภาพที่เท่าไหร่(order) ไม่ชนกัน
+        for idx, img in enumerate(chunk["images"], start=1):
             image_uid = f"{pdf_name}__page{chunk['page']}__order{idx}"
             file_id = data_images.put(img["bytes"],
-            filename = f"{pdf_name}_page{chunk['page']}.{img['ext']}",
-            content_type = f"image/{'jpeg' if img['ext'].lower() in ('jpg', 'jpeg') else img['ext'].lower()}",
-                      metadata={
-                                "chunk_page": chunk["page"],        # chunk นี้อ้างอิงหน้าไหน
-                                "order": idx,             # ตำแหน่งของรูป
-                                "description": img["description"], # อธิบายภาพ
-                                "source": pdf_name,                # ไฟล์ต้นทาง
-                                "image_uid": image_uid   #  สำคัญ
+                                       filename=f"{pdf_name}_page{chunk['page']}.{img['ext']}",
+                                       content_type=f"image/{'jpeg' if img['ext'].lower() in ('jpg', 'jpeg') else img['ext'].lower()}",
+                                       metadata={
+                                           "chunk_page": chunk["page"],        # chunk นี้อ้างอิงหน้าไหน
+                                           "order": idx,             # ตำแหน่งของรูป
+                                           "description": img["description"],  # อธิบายภาพ
+                                           "source": pdf_name,                # ไฟล์ต้นทาง
+                                           "image_uid": image_uid   #  สำคัญ
 
-                            }
-                      )
+                                       }
+                                       )
 
             image_embedding = embed_text(img["description"])
             collection.insert_one({
                 "content": img["description"],
                 "metadata": {
-                             "type": "image",
-                             "source": pdf_name,
-                             "page": chunk['page'],
-                             "order": idx,
-                             "gridfs_id": file_id,
-                             "image_uid": image_uid
-                            },
-                "embedding": image_embedding.tolist()
+                    "type": "image",
+                    "source": pdf_name,
+                    "page": chunk['page'],
+                    "order": idx,
+                    "gridfs_id": file_id,
+                    "image_uid": image_uid
+                },
+                "embedding": image_embedding
             })
 
 
 # ดึงตำแหน่งโฟลเดอร์ปัจจุบัน
-
-# # เชื่อมเข้าไปที่ src/FoodMenu.pdf
-
 SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
 os.makedirs(SRC_DIR, exist_ok=True)  # สร้างโฟลเดอร์ถ้ายังไม่มี
-# # ✅ [แก้ไข] pdf_path เปลี่ยนเป็น SRC_DIR ชี้แค่โฟลเดอร์ src/ ไม่ชี้ไฟล์ใดไฟล์หนึ่ง
-# # เดิม: pdf_path ชี้ไปที่ไฟล์ PDF โดยตรง → ถ้าไม่มีไฟล์จะ error ตอน import
-
-
-# เอาไว้ test pdf โดยเฉพาะ
-# ✅ [แก้ไข] ลบ mogodb_store ออกจาก global scope
-# เดิม: mogodb_store = store_in_mongodb(pdf_content, pdf_path) → รันทันทีตอน import
-#        ถ้าไม่มี pdf_content (เพราะ try block ถูก comment ออก) จะ NameError
-#        และถ้า pdf ไม่มีอยู่จริง server จะ start ไม่ได้เลย
-# ใหม่: การ store จะเกิดขึ้นใน /upload_pdf endpoint เท่านั้น
-
-#บันทึกลงฐานข้อมูล
 
 
 # input ไฟล์ PDF
@@ -312,7 +284,6 @@ async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(400, "Only PDF files allowed")
 
-    # ✅ ใช้ SRC_DIR แทน BASE_DIR + "../src" เพื่อความสะอาด
     save_path = os.path.join(SRC_DIR, file.filename)
     with open(save_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
@@ -322,5 +293,3 @@ async def upload_pdf(file: UploadFile = File(...)):
     store_in_mongodb(content_chunks, file.filename)
 
     return {"message": f"{file.filename} uploaded and processed", "summary": summary}
-
-#     # ดึงรายชื่อไฟล์ที่ unique จาก MongoDB

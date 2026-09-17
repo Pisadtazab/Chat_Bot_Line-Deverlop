@@ -1,24 +1,33 @@
-
 import logging
 import os
 import re
 import threading
 import time
-
+import numpy as np
+import requests
 from dotenv import load_dotenv
 from linebot.v3.messaging import ImageMessage, TextMessage
 from openai import OpenAI
-from sentence_transformers import SentenceTransformer
+
 
 from app.DB.database import collection
 from app.promrt_typhoon import DOCUMENT_SYSTEM_PROMPT
-
+from app.routers.extractPDF import embed_text
 # การเก็บ key
 load_dotenv(override=True)
 
-# --- Embed query ---
-MODEL_NAME = "BAAI/bge-m3"
-sentence_model = SentenceTransformer(MODEL_NAME)
+# ✅ [แก้ไข] เอา SentenceTransformer (โหลดโมเดลในเครื่อง ~470MB RAM) ออก
+# เดิม: sentence_model = SentenceTransformer(MODEL_NAME) → กิน RAM เกิน Railway free (0.5GB)
+# ใหม่: เรียก embedding ผ่าน Hugging Face Inference API แทน
+#       ⚠️ สำคัญ: ต้องใช้วิธีสร้าง embedding แบบเดียวกับตอน insert ข้อมูล (ในไฟล์ upload_pdf.py)
+#       ไม่งั้น vector จะคนละ "พื้นที่" กัน ค้นหาแล้วผลลัพธ์จะผิดเพี้ยนหรือหาไม่เจอเลย
+HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+EMBED_MODEL_URL = (
+    "https://router.huggingface.co/hf-inference/models/"
+    "BAAI/bge-m3/pipeline/feature-extraction"
+)
+HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
+
 
 REQUEST_INTERVAL = 0.25  # 4 request / sec
 last_request_time = 0
@@ -58,8 +67,8 @@ def query_rag(query_text):
 
     print("####  RAG get Question #### ")
 
-    # --- 1) สร้าง embedding ของคำถาม ---
-    question_embedding = sentence_model.encode(query_text).tolist()
+    # --- 1) สร้าง embedding ของคำถาม (ผ่าน HF API แทนโมเดลในเครื่อง) ---
+    question_embedding = embed_text(query_text)
 
     # --- 2) กำหนดจำนวนผลลัพธ์ตามคำถาม ---
     # max_result = 3
@@ -100,6 +109,7 @@ def query_rag(query_text):
     
       # ข้อความที่คะแนนสูงสุด → บอกว่า PDF ไหนเกี่ยวที่สุด
     top_result = results[0]
+    print(f"top_result = '{top_result}'")
     # หน้าที่อธิบาย ระบุ PDF บอกว่า context มาจากไฟล์ไหน current_pdf_name
     current_pdf_name = top_result["metadata"].get("source")
     
@@ -208,17 +218,17 @@ def id_image(llm_answer, current_pdf_name):
 def send_image(gridfs_ids):
     """ส่งรูปภาพผ่านไลน์ด้วย push"""
     
-    ngrok_uri = os.getenv("NGROK_URL")  
+    chatbot_uri = os.getenv("ChatBot_URL")  
 
     try:
-        if not ngrok_uri:
-            raise ValueError("NGROK_URL not set")
+        if not chatbot_uri:
+            raise ValueError("ChatBot_URL not set")
 
         # ถ้า env มี http/https อยู่แล้วจะไม่เติมซ้ำ
-        if not ngrok_uri.startswith("http"):
-            base_url = f"https://{ngrok_uri}"
+        if not chatbot_uri.startswith("http"):
+            base_url = f"https://{chatbot_uri}"
         else:
-            base_url = ngrok_uri
+            base_url = chatbot_uri
 
         base_url = base_url.rstrip("/")
 
