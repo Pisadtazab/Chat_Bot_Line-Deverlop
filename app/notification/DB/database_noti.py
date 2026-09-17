@@ -6,8 +6,8 @@ from pymongo import MongoClient
 
 load_dotenv()
 
-mogo_uri_locl = os.getenv("MONGO_URI_LOCAL")
-client = MongoClient(mogo_uri_locl)
+mogo_uri_borc = os.getenv("MONGO_URI_BORC")
+client = MongoClient(mogo_uri_borc)
 
 db = client["BORC"]
 collection = db["UserProfile"]

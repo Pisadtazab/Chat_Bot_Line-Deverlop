@@ -162,7 +162,7 @@ ACCESS_TOKEN=your_line_channel_access_token
 CHANNEL_SECRET=your_line_channel_secret
 Typhoon_api_key=your_typhoon_api_key
 MONGO_URI=your_mongodb_connection_string          # สำหรับ chatbot DB
-MONGO_URI_LOCAL=your_mongodb_local_connection     # สำหรับ notification DB (BORC)
+MONGO_URI_BORCL=mongodb_BORC     # สำหรับ notification DB (BORC)
 NGROK_TOKEN=your_ngrok_authtoken
 NGROK_URL=your_ngrok_or_cloudflare_url
 ```
