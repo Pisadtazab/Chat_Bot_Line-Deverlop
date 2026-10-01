@@ -15,7 +15,7 @@ class CancelData(BaseModel):
 router = APIRouter()
 
 
-@router.post("/CancelBooking")
+@router.post("/CancelBookingAdvisor")
 def notify_cancel(data: CancelData):
     reason = data.CancelReason.strip() or "ไม่ได้ระบุเหตุผล"
     send_flex_notification(data.AdvisorId, "นักศึกษายกเลิกการจอง ", "#FF4444", [
