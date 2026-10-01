@@ -265,7 +265,7 @@ docker compose down
 | `POST` | `/NotifyFristLogin/UserLine_id` | แจ้งเตือนเมื่อผู้ใช้ผูก LINE กับระบบ |
 | `POST` | `/NotifyQueueAdivsor/...` | แจ้งเตือนอาจารย์เมื่อมีนักศึกษาจองคิว |
 | `POST` | `/NotifyQueueAdivsor/RecheduleAdvisor` | แจ้งเตือนอาจารย์เมื่อมีการเลื่อนนัด |
-| `POST` | `/NotifyCancelled/CancelBooking` | แจ้งเตือนอาจารย์เมื่อนักศึกษายกเลิกการจอง |
+| `POST` | `/NotifyCancelled/CancelBookingAdvisor` | แจ้งเตือนอาจารย์เมื่อนักศึกษายกเลิกการจอง |
 | `POST` | `/NotifyQueueStudent/NotifyStudent` | แจ้งเตือนนักศึกษาเมื่ออาจารย์ยืนยันหรือยกเลิก |
 | `POST` | `/NotifyQueueStudent/RecheduleStudent` | แจ้งเตือนนักศึกษาเมื่ออาจารย์เลื่อนนัด |
 

@@ -9,7 +9,7 @@ class CancelData(BaseModel):
     StudentName: str
     Date: str
     Time: str
-    CancelReason: str
+    CancelReason: str | None = None
 
 
 router = APIRouter()
