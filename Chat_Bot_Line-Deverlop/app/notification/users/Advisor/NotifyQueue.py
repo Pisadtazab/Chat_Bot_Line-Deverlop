@@ -17,7 +17,7 @@ class BookingData(BaseModel):
 
 router = APIRouter()
 
-
+#
 @router.post("/BookingStudent")
 def notifyqueue(data: BookingData):
     confirmation = [
