@@ -15,7 +15,7 @@ class BookingData(BaseModel):
 
 router = APIRouter()
 
-
+#
 @router.post("/BookingStudent")
 def notifyqueue(data: BookingData):
     send_flex_notification(data.AdvisorId, "มีนักศึกษาขอจองคิว 📋", "#FFB100", [
