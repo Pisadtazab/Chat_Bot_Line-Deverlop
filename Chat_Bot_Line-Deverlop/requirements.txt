@@ -1,5 +1,5 @@
 fastapi==0.141.1
-pymupdf==1.24.9
+pymupdf
 FixThaiPDF==0.2.1
 line_bot_sdk==3.18.1
 numpy==2.5.2

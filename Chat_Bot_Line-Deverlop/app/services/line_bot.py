@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from threading import Thread
 from collections import deque
 from collections.abc import Callable
 from typing import Any
@@ -123,7 +124,7 @@ class LineBotService:
 
     def process_message(self, event: MessageEvent) -> None:
         user_id = event.source.user_id
-        self.start_loading(user_id)
+        Thread(target=self.start_loading, args=(user_id,), daemon=True).start()
 
         try:
             answer, _current_pdf_name, image_results = self.query_rag(
