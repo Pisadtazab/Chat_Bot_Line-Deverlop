@@ -43,7 +43,7 @@ def notify_student(data: StudentNotifyData):
         flex_row("🔖 สถานะ", status_text, value_color=color, value_weight="bold"),
     ]
     confirmation = [
-        flex_row("👤 นักศึกษา", data.StudentName, wrap=True),
+        flex_row("👨‍🏫 อาจารย์", data.AdvisorName),
         flex_row("📝 หัวข้อ", research_topic, wrap=True),
         flex_row("📅 วันที่", data.Date),
         flex_row("⏰ เวลา", data.Time),
