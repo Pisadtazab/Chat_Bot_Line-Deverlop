@@ -29,7 +29,7 @@ def notify_cancel(data: CancelData):
         flex_row("💬 เหตุผล", reason, value_color="#FF4444", value_weight="bold", wrap=True),
     ]
     confirmation = [
-        flex_row("👤 ชื่อ", data.StudentName, wrap=True),
+        flex_row("👨‍🏫 อาจารย์", data.AdvisorName, wrap=True),
         *([flex_row("📝 หัวข้อ", data.ResearchTopic, wrap=True)] if data.ResearchTopic else []),
         flex_row("📅 วันที่", data.Date),
         flex_row("⏰ เวลา", data.Time),
