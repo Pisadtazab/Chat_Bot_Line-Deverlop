@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 load_dotenv(override=True)
 
 
-HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
+HF_TOKEN = os.getenv("CLOUDFLARE_TOKEN")
+ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 # ✅ [แก้ไข] เปลี่ยน endpoint จาก api-inference.huggingface.co -> router.huggingface.co/hf-inference
 # เดิม: https://api-inference.huggingface.co/... -> HF ปิด domain นี้ไปแล้ว (DNS resolve ไม่เจอ / 410 Gone)
 EMBED_MODEL_URL = (
-    "https://router.huggingface.co/hf-inference/models/"
-    "BAAI/bge-m3/pipeline/feature-extraction"
+   "https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/baai/bge-m3"
 )
 
 HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
@@ -82,13 +82,13 @@ def embed_text(text: str) -> List[float]:
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
         detail = exc.response.text[:300] if exc.response is not None else str(exc)
-        logger.error("Hugging Face embedding request returned %s: %s", status, detail)
+        logger.error("CLOUDFLARE embedding request returned %s: %s", status, detail)
         raise HTTPException(502, "Embedding API returned an error") from exc
     except requests.RequestException as exc:
-        logger.exception("Hugging Face embedding request failed")
+        logger.exception("CLOUDFLARE embedding request failed")
         raise HTTPException(502, "Embedding API request failed; check server logs") from exc
     except (ValueError, TypeError) as exc:
-        logger.exception("Hugging Face returned an invalid embedding response")
+        logger.exception("CLOUDFLARE returned an invalid embedding response")
         raise HTTPException(502, "Invalid embedding response") from exc
 
 
