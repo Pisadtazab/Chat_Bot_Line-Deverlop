@@ -70,7 +70,7 @@ def embed_text(text: str) -> List[float]:
         response = requests.post(
             f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/baai/bge-m3",
             headers=HF_HEADERS,
-            json={"inputs": payload},
+            json={"text": [payload]},
             timeout=60,
         )
         response.raise_for_status()
