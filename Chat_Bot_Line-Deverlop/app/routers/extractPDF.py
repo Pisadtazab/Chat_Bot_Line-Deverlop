@@ -38,9 +38,9 @@ ACCOUNT_ID = os.getenv("ACCOUNT_ID")
 
 # ✅ [แก้ไข] เปลี่ยน endpoint จาก api-inference.huggingface.co -> router.huggingface.co/hf-inference
 # เดิม: https://api-inference.huggingface.co/... -> HF ปิด domain นี้ไปแล้ว (DNS resolve ไม่เจอ / 410 Gone)
-EMBED_MODEL_URL = (
-   f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/baai/bge-m3"
-)
+# EMBED_MODEL_URL = (
+#    f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/baai/bge-m3"
+# )
 
 HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
@@ -68,7 +68,7 @@ def embed_text(text: str) -> List[float]:
 
     try:
         response = requests.post(
-            EMBED_MODEL_URL,
+            f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/ai/run/@cf/baai/bge-m3",
             headers=HF_HEADERS,
             json={"inputs": payload},
             timeout=60,
