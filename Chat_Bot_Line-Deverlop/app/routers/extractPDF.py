@@ -74,11 +74,9 @@ def embed_text(text: str) -> List[float]:
             timeout=60,
         )
         response.raise_for_status()
-        arr = np.array(response.json(), dtype=np.float32)
-        while arr.ndim > 1:          # รองรับทั้ง token-level และ batch
-            arr = arr.mean(axis=0)
-        norm = np.linalg.norm(arr)
-        return (arr / norm).tolist() if norm > 0 else arr.tolist()
+        result = response.json()["result"]
+        embedding = result["data"][0]
+        return embedding
     except requests.HTTPError as exc:
         status = exc.response.status_code if exc.response is not None else "unknown"
         detail = exc.response.text[:300] if exc.response is not None else str(exc)
