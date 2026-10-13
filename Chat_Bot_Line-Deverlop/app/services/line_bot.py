@@ -156,6 +156,7 @@ class LineBotService:
         messages = [self.make_text_message(answer)]
         messages.extend(self.make_image_messages(image_results))
         messages = [message for message in messages if message is not None][:MAX_LINE_MESSAGES]
+        print(f"#### LINE messages queued: {len(messages)} (images: {max(0, len(messages) - 1)}) ####")
 
         if not messages:
             logger.warning("No LINE messages produced for user_id=%s", user_id)

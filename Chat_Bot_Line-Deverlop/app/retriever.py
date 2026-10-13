@@ -399,6 +399,9 @@ def query_rag(query_text):
         image_results = []
 
     logger.info("Selected %d relevant image results", len(image_results))
+    print(f"#### Selected image results ({len(image_results)}) ####")
+    for image_url in image_results:
+        print(image_url)
 
     return (
         llm_answer,
