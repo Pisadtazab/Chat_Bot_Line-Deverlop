@@ -132,6 +132,15 @@ def query_rag(query_text):
     results = list(collection.aggregate(pipeline))
 
     print("#### Vector Search Results ####")
+    for index, result in enumerate(results, start=1):
+        metadata = result.get("metadata", {}) or {}
+        print(
+            f"[{index}] score={result.get('score')} "
+            f"type={metadata.get('type')} source={metadata.get('source')} "
+            f"page={metadata.get('page')} content={(result.get('content') or '')[:200]!r}"
+        )
+        if metadata.get("type") == "image":
+            print(f" image_url={metadata.get('image_url')}")
 
     if not results:
         print("No matching results found.")
@@ -192,6 +201,8 @@ def query_rag(query_text):
 - ห้ามสร้างหรือเดา image_url ใหม่
 - หากผู้ใช้ขอรูปภาพหลายคนหรือหลายรายการ
   ให้เลือก image_url ของทุกคนหรือทุกรายการที่ตรงกับคำถาม
+- หากขอรูปอาจารย์หลายคน ให้เลือกหนึ่งรูปต่ออาจารย์หนึ่งคน และพยายามให้มีรูปของทุกคนที่พบในบริบท
+- หากมีหลายรูปของอาจารย์คนเดียวกัน ให้เลือกเพียงรูปเดียวที่ตรงที่สุด ห้ามส่งรูปคนเดิมซ้ำ
 - ไม่ต้องจำกัดจำนวน image_urls
 - หากพบรูปที่ตรงกับคำถามหลายรูป ให้เลือกทั้งหมดที่เกี่ยวข้อง
 - หากไม่มีรูปที่เกี่ยวข้อง ให้ image_urls เป็น []
