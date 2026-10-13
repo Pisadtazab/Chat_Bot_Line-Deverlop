@@ -372,30 +372,44 @@ def query_rag(query_text):
     if not isinstance(selected_image_urls, list):
         selected_image_urls = []
 
+    image_request = any(
+        term in query_text.lower()
+        for term in (
+            "ขอรูป", "ขอดูรูป", "ดูรูป", "ส่งรูป", "แสดงรูป", "รูปภาพ", "รูปของ", "รูปอาจารย์",
+            "ขอภาพ", "ขอดูภาพ", "ดูภาพ", "ส่งภาพ", "แสดงภาพ", "ภาพของ", "ภาพอาจารย์",
+            "image", "photo", "picture",
+        )
+    )
+
     # ============================================================
     # ตรวจสอบ URL กับ MongoDB context
     # ============================================================
 
-    valid_image_urls = {
+    context_image_urls = list(dict.fromkeys(
         result.get("metadata", {}).get("image_url")
         for result in results
         if (
             result.get("metadata", {}).get("type") == "image"
             and result.get("metadata", {}).get("image_url")
         )
-    }
+    ))
+    valid_image_urls = set(context_image_urls)
 
-    # เอาเฉพาะ URL ที่มีอยู่จริงใน MongoDB
-    image_results = [
-        url
-        for url in selected_image_urls
-        if isinstance(url, str)
-        and url in valid_image_urls
-    ]
+    # Use database URLs directly for image requests; LLM URL copying is unreliable.
+    image_results = (
+        context_image_urls
+        if image_request
+        else [
+            url
+            for url in selected_image_urls
+            if isinstance(url, str)
+            and url in valid_image_urls
+        ]
+    )
 
     # ป้องกันรูปซ้ำ
     image_results = list(dict.fromkeys(image_results))
-    if raw_json_in_answer:
+    if raw_json_in_answer and not image_request:
         image_results = []
 
     logger.info("Selected %d relevant image results", len(image_results))
