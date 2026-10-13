@@ -132,16 +132,6 @@ def query_rag(query_text):
     results = list(collection.aggregate(pipeline))
 
     print("#### Vector Search Results ####")
-    for index, result in enumerate(results, start=1):
-        metadata = result.get("metadata", {}) or {}
-        print(
-            f"[{index}] score={result.get('score')} "
-            f"type={metadata.get('type')} source={metadata.get('source')} "
-            f"page={metadata.get('page')} content={(result.get('content') or '')[:200]!r}"
-        )
-        if metadata.get("type") == "image":
-            print(f" image_url={metadata.get('image_url')}")
-
     if not results:
         print("No matching results found.")
 
@@ -199,15 +189,16 @@ def query_rag(query_text):
   ให้เลือก image_url ที่ตรงกับคำถาม
 - ใช้เฉพาะ image_url ที่ปรากฏอยู่ในบริบทเท่านั้น
 - ห้ามสร้างหรือเดา image_url ใหม่
-- หากผู้ใช้ขอรูปภาพหลายคนหรือหลายรายการ
-  ให้เลือก image_url ของทุกคนหรือทุกรายการที่ตรงกับคำถาม
-- หากขอรูปอาจารย์หลายคน ให้เลือกหนึ่งรูปต่ออาจารย์หนึ่งคน และพยายามให้มีรูปของทุกคนที่พบในบริบท
-- หากมีหลายรูปของอาจารย์คนเดียวกัน ให้เลือกเพียงรูปเดียวที่ตรงที่สุด ห้ามส่งรูปคนเดิมซ้ำ
+- หากขอรูปอาจารย์หลายคนโดยไม่ระบุชื่อ ให้ถามชื่ออาจารย์ก่อนและใช้ image_urls เป็น []
+- หากระบุชื่ออาจารย์ ให้เลือกรูปที่ตรงกับชื่อที่ระบุเท่านั้น หนึ่งรูปต่อคน และไม่ส่งรูปซ้ำ
+- หากระบุชื่ออาจารย์คนเดียว ให้เลือกรูปที่ตรงที่สุดหนึ่งรูป
 - ไม่ต้องจำกัดจำนวน image_urls
 - หากพบรูปที่ตรงกับคำถามหลายรูป ให้เลือกทั้งหมดที่เกี่ยวข้อง
 - หากไม่มีรูปที่เกี่ยวข้อง ให้ image_urls เป็น []
+- เมื่อผู้ใช้ขอรูปภาพ ห้ามระบุจำนวนรูปใน answer เพราะระบบจะแจ้งจำนวนรูปที่แนบจริง
 - หากถามรายชื่อหรือข้อมูลทั้งหมด โดยไม่ได้ขอรูป ให้ตอบเป็นข้อความและใช้ image_urls เป็น []
-- หากขอรูปของทุกคนหรือทุกรายการโดยตรง ให้เลือก image_url ที่ตรงกันทั้งหมด
+- หากคำขอรูปหลายคนไม่ระบุชื่อ ให้ถามชื่อก่อนและใช้ image_urls เป็น []
+- หากระบุชื่อหลายคน ให้เลือกเฉพาะรูปของชื่อที่ระบุและพบในบริบท
 - คำตอบในฟิลด์ answer ต้องเป็นข้อความปกติ ห้ามใส่ JSON ซ้อนในฟิลด์นี้
 - JSON เป็นรูปแบบภายในสำหรับระบบเท่านั้น ห้ามส่งโครง JSON ไปเป็นคำตอบผู้ใช้
 - image_urls ใช้เฉพาะเมื่อผู้ใช้ร้องขอให้แสดงรูปภาพโดยตรง
@@ -233,8 +224,8 @@ def query_rag(query_text):
     ]
 }}
 
-หากผู้ใช้ขอรูปของทุกคนหรือทุกรายการ และในบริบทมีรูปที่เกี่ยวข้อง
-ให้ส่ง image_urls ของรูปที่เกี่ยวข้องทั้งหมด เพื่อให้ระบบตรวจข้อจำกัดจำนวนรูปก่อนส่ง LINE
+หากผู้ใช้ขอรูปอาจารย์หลายคนโดยไม่ระบุชื่อ ให้ถามชื่ออาจารย์ก่อนและส่ง image_urls เป็น []
+หากระบุชื่ออาจารย์ ให้ส่งเฉพาะ image_urls ของอาจารย์ที่ระบุและพบในบริบท
 
 ห้ามใส่ Markdown
 ห้ามใส่ ```json
@@ -372,50 +363,39 @@ def query_rag(query_text):
     if not isinstance(selected_image_urls, list):
         selected_image_urls = []
 
-    image_request = any(
-        term in query_text.lower()
-        for term in (
-            "ขอรูป", "ขอดูรูป", "ดูรูป", "ส่งรูป", "แสดงรูป", "รูปภาพ", "รูปของ", "รูปอาจารย์",
-            "ขอภาพ", "ขอดูภาพ", "ดูภาพ", "ส่งภาพ", "แสดงภาพ", "ภาพของ", "ภาพอาจารย์",
-            "image", "photo", "picture",
-        )
-    )
-
     # ============================================================
     # ตรวจสอบ URL กับ MongoDB context
     # ============================================================
 
-    context_image_urls = list(dict.fromkeys(
+    valid_image_urls = {
         result.get("metadata", {}).get("image_url")
         for result in results
         if (
             result.get("metadata", {}).get("type") == "image"
             and result.get("metadata", {}).get("image_url")
         )
-    ))
-    valid_image_urls = set(context_image_urls)
+    }
 
-    # Use database URLs directly for image requests; LLM URL copying is unreliable.
-    image_results = (
-        context_image_urls
-        if image_request
-        else [
-            url
-            for url in selected_image_urls
-            if isinstance(url, str)
-            and url in valid_image_urls
-        ]
-    )
+    # เอาเฉพาะ URL ที่มีอยู่จริงใน MongoDB
+    image_results = [
+        url
+        for url in selected_image_urls
+        if isinstance(url, str)
+        and url in valid_image_urls
+    ]
 
     # ป้องกันรูปซ้ำ
     image_results = list(dict.fromkeys(image_results))
-    if raw_json_in_answer and not image_request:
+    if not any(
+        term in query_text.lower()
+        for term in ("หลายคน", "หลายท่าน", "ทุกคน", "ทุกท่าน", "ทั้งหมด", "และ", "หรือ", "กับ", ",")
+    ):
+        image_results = image_results[:1]
+
+    if raw_json_in_answer:
         image_results = []
 
     logger.info("Selected %d relevant image results", len(image_results))
-    print(f"#### Selected image results ({len(image_results)}) ####")
-    for image_url in image_results:
-        print(image_url)
 
     return (
         llm_answer,

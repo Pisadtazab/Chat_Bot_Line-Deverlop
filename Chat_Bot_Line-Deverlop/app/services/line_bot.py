@@ -145,18 +145,18 @@ class LineBotService:
         if len(image_results) > max_image_messages:
             answer = (
                 f"{answer}\n\n"
-                "📷 พบรูปภาพที่เกี่ยวข้องทั้งหมด "
-                f"{len(image_results)} รูป "
-                "แต่ไม่สามารถแสดงรูปภาพทั้งหมดได้ "
-                "เนื่องจากข้อจำกัดของ LINE "
-                f"(ส่งได้สูงสุด {max_image_messages} รูปต่อข้อความ)"
+                f"📷 พบรูปที่ตรงกับคำขอ {len(image_results)} รูป "
+                f"ข้อความนี้แนบได้ {max_image_messages} รูปตามข้อจำกัดของ LINE "
+                "หากต้องการรูปที่เหลือ กรุณาระบุชื่ออาจารย์ในข้อความถัดไป"
             )
             image_results = image_results[:max_image_messages]
+
+        if image_results:
+            answer = f"{answer}\n\nแนบรูปภาพ {len(image_results)} รูป"
 
         messages = [self.make_text_message(answer)]
         messages.extend(self.make_image_messages(image_results))
         messages = [message for message in messages if message is not None][:MAX_LINE_MESSAGES]
-        print(f"#### LINE messages queued: {len(messages)} (images: {max(0, len(messages) - 1)}) ####")
 
         if not messages:
             logger.warning("No LINE messages produced for user_id=%s", user_id)
