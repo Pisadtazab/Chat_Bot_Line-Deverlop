@@ -140,20 +140,7 @@ class LineBotService:
             )
             image_results = []
 
-        max_image_messages = MAX_LINE_MESSAGES - 1
-
-        if len(image_results) > max_image_messages:
-            answer = (
-                f"{answer}\n\n"
-                f"📷 พบรูปที่ตรงกับคำขอ {len(image_results)} รูป "
-                f"ข้อความนี้แนบได้ {max_image_messages} รูปตามข้อจำกัดของ LINE "
-                "หากต้องการรูปที่เหลือ กรุณาระบุชื่ออาจารย์ในข้อความถัดไป"
-            )
-            image_results = image_results[:max_image_messages]
-
-        if image_results:
-            answer = f"{answer}\n\nแนบรูปภาพ {len(image_results)} รูป"
-
+        image_results = image_results[:1]
         messages = [self.make_text_message(answer)]
         messages.extend(self.make_image_messages(image_results))
         messages = [message for message in messages if message is not None][:MAX_LINE_MESSAGES]
