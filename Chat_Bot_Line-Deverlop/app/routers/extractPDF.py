@@ -175,7 +175,7 @@ def extract_pdf_content(pdf_path: str) -> Tuple[List[Dict], str]:
                         image = image.convert("RGB")
 
                     # สร้างคำอธิบายรูป
-                    img_desc = f"รูปภาพ หน้า {page_num+1} รูปที่ {img_index+1}, บริบท: {text[:80]}..."
+                    img_desc = f"รูปภาพ หน้า {page_num+1} รูปที่ {img_index+1}, บริบท: {text[:6000]}"
                     chunk_data["images"].append({
                         "bytes": image_bytes,
                         "ext": image_ext,

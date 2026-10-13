@@ -12,7 +12,7 @@ TZ = ZoneInfo("Asia/Bangkok")
 
 def template_notify(booking: dict, marker: str, title: str, color: str, status: str) -> None:
     delivery = send_flex_notifications(
-        [booking.get("userId"), booking.get("AdvisorId")], title, color, [
+        [booking.get("UserId"), booking.get("AdvisorId")], title, color, [
             flex_row("👤 นักศึกษา", booking.get("StudentName", "-"), wrap=True),
             flex_row("👨‍🏫 อาจารย์", booking.get("Advisor_Name", "-"), wrap=True),
             flex_row("📝 หัวข้อ", booking.get("ResearchTopic", "-"), wrap=True),
