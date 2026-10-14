@@ -99,37 +99,42 @@ def query_rag(query_text):
 
     print("#### RAG get Question ####")
 
-    needs_extended_answer = any(
+    needs_all_advisors = (
+        any(term in query_text for term in ("อาจารย์", "อจารย์"))
+        and any(
+            term in query_text
+            for term in ("ทั้งหมด", "ทุกคน", "ทุกอาจารย์", "รายชื่อ", "มีใครบ้าง")
+        )
+    )
+    needs_extended_answer = needs_all_advisors or any(
         term in query_text for term in EXTENDED_QUERY_TERMS
     )
-    question_embedding = embed_text(query_text)
-
-    pipeline = [
-        {
-            "$vectorSearch": {
-                "index": "vector_index2",
-                "path": "embedding",
-                "queryVector": question_embedding,
-                "numCandidates": 80,
-                "limit": (
-                    MAX_CONTEXT_RESULTS
-                    if needs_extended_answer
-                    else DEFAULT_CONTEXT_RESULTS
-                ),
-            }
-        },  
-        {
-            "$project": {
-                "content": 1,
-                "metadata": 1,
-                "score": {
-                    "$meta": "vectorSearchScore"
+    if needs_all_advisors:
+        results = list(collection.find(
+            {"metadata.type": "text"},
+            {"content": 1, "metadata": 1},
+        ))
+    else:
+        question_embedding = embed_text(query_text)
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "index": "vector_index2",
+                    "path": "embedding",
+                    "queryVector": question_embedding,
+                    "numCandidates": 80,
+                    "limit": MAX_CONTEXT_RESULTS if needs_extended_answer else DEFAULT_CONTEXT_RESULTS,
                 }
-            }
-        }
-    ]
-
-    results = list(collection.aggregate(pipeline))
+            },
+            {
+                "$project": {
+                    "content": 1,
+                    "metadata": 1,
+                    "score": {"$meta": "vectorSearchScore"},
+                }
+            },
+        ]
+        results = list(collection.aggregate(pipeline))
 
     print("#### Vector Search Results ####")
     if not results:
@@ -177,6 +182,8 @@ def query_rag(query_text):
 
 คำถาม:
 {query_text}
+
+{"เมื่อขอรายชื่ออาจารย์ทั้งหมด ให้ไล่รวบรวมชื่ออาจารย์ทุกชื่อที่ปรากฏในบริบทนี้ ตัดชื่อซ้ำ และห้ามจำกัดจำนวนชื่อ" if needs_all_advisors else ""}
 
 บริบท:
 {context}
