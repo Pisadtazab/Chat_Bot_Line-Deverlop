@@ -97,6 +97,7 @@ def query_rag(query_text):
             image_results
     """
 
+    rag_started = time.perf_counter()
     print("#### RAG get Question ####")
 
     needs_all_advisors = (
@@ -110,12 +111,26 @@ def query_rag(query_text):
         term in query_text for term in EXTENDED_QUERY_TERMS
     )
     if needs_all_advisors:
-        results = list(collection.find(
-            {"metadata.type": "text"},
-            {"content": 1, "metadata": 1},
-        ))
+        mongo_started = time.perf_counter()
+        try:
+            results = list(collection.find(
+                {"metadata.type": "text"},
+                {"content": 1, "metadata": 1},
+            ))
+        finally:
+            logger.info(
+                "RAG MongoDB search completed in %.3fs (all advisors)",
+                time.perf_counter() - mongo_started,
+            )
     else:
-        question_embedding = embed_text(query_text)
+        embedding_started = time.perf_counter()
+        try:
+            question_embedding = embed_text(query_text)
+        finally:
+            logger.info(
+                "RAG embedding completed in %.3fs",
+                time.perf_counter() - embedding_started,
+            )
         pipeline = [
             {
                 "$vectorSearch": {
@@ -134,11 +149,19 @@ def query_rag(query_text):
                 }
             },
         ]
-        results = list(collection.aggregate(pipeline))
+        mongo_started = time.perf_counter()
+        try:
+            results = list(collection.aggregate(pipeline))
+        finally:
+            logger.info(
+                "RAG MongoDB vector search completed in %.3fs",
+                time.perf_counter() - mongo_started,
+            )
 
     print("#### Vector Search Results ####")
     if not results:
         print("No matching results found.")
+        logger.info("RAG completed in %.3fs (no results)", time.perf_counter() - rag_started)
 
         return (
             "ไม่พบข้อมูลที่เกี่ยวข้อง",
@@ -240,29 +263,43 @@ def query_rag(query_text):
     # Call Typhoon
     # ============================================================
 
-    wait_for_rate_limit()
+    rate_limit_started = time.perf_counter()
+    try:
+        wait_for_rate_limit()
+    finally:
+        logger.info(
+            "RAG Typhoon rate-limit wait took %.3fs",
+            time.perf_counter() - rate_limit_started,
+        )
 
-    response = typhoon_client.chat.completions.create(
-        model="typhoon-v2.5-30b-a3b-instruct",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "คุณเป็นผู้ให้คำแนะนำปรึกษา "
-                    "คอยช่วยเหลือในขอบเขตที่ทำได้ "
-                    f"{DOCUMENT_SYSTEM_PROMPT}"
-                )
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.3,
-        max_tokens=1500 if needs_extended_answer else 700,
-        top_p=0.9,
-        presence_penalty=0.6,
-    )
+    llm_started = time.perf_counter()
+    try:
+        response = typhoon_client.chat.completions.create(
+            model="typhoon-v2.5-30b-a3b-instruct",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "คุณเป็นผู้ให้คำแนะนำปรึกษา "
+                        "คอยช่วยเหลือในขอบเขตที่ทำได้ "
+                        f"{DOCUMENT_SYSTEM_PROMPT}"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0.3,
+            max_tokens=1500 if needs_extended_answer else 700,
+            top_p=0.9,
+            presence_penalty=0.6,
+        )
+    finally:
+        logger.info(
+            "RAG Typhoon request completed in %.3fs",
+            time.perf_counter() - llm_started,
+        )
 
     llm_raw = response.choices[0].message.content
 
@@ -402,6 +439,7 @@ def query_rag(query_text):
         image_results = []
 
     logger.info("Selected %d relevant image results", len(image_results))
+    logger.info("RAG completed in %.3fs", time.perf_counter() - rag_started)
 
     return (
         llm_answer,

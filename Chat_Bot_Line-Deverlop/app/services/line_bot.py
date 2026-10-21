@@ -3,12 +3,13 @@ import logging
 from threading import Thread
 from collections import deque
 from collections.abc import Callable
+from time import perf_counter
 from typing import Any
 from weakref import WeakValueDictionary
 
 import requests
 from linebot.v3 import WebhookHandler
-from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, PushMessageRequest
+from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, PushMessageRequest,ReplyMessageRequest
 from linebot.v3.webhooks import FollowEvent, MessageEvent, TextMessageContent
 
 logger = logging.getLogger(__name__)
@@ -106,6 +107,7 @@ class LineBotService:
         )
 
     async def queue_message_for_user(self, event: MessageEvent) -> None:
+        queued_at = perf_counter()
         user_id = event.source.user_id
         if not user_id:
             logger.warning("Ignoring LINE message without a user_id")
@@ -117,15 +119,21 @@ class LineBotService:
             lock = asyncio.Lock()
             self.user_message_locks[user_id] = lock
         async with lock, self.rag_semaphore:
+            logger.info(
+                "LINE message waited %.3fs for processing",
+                perf_counter() - queued_at,
+            )
             try:
                 await asyncio.to_thread(self.process_message, event)
             except Exception:
                 logger.exception("Unable to process LINE message for user_id=%s", user_id)
 
     def process_message(self, event: MessageEvent) -> None:
+        process_started = perf_counter()
         user_id = event.source.user_id
         Thread(target=self.start_loading, args=(user_id,), daemon=True).start()
 
+        rag_started = perf_counter()
         try:
             answer, _current_pdf_name, image_results = self.query_rag(
                 event.message.text
@@ -139,6 +147,11 @@ class LineBotService:
                 "กรุณาลองส่งคำถามอีกครั้ง"
             )
             image_results = []
+        finally:
+            logger.info(
+                "LINE RAG processing took %.3fs",
+                perf_counter() - rag_started,
+            )
 
         image_results = image_results[:1]
         messages = [self.make_text_message(answer)]
@@ -150,6 +163,10 @@ class LineBotService:
             return
 
         with ApiClient(self.configuration) as api_client:
-            MessagingApi(api_client).push_message(
-                PushMessageRequest(to=user_id, messages=messages)
+            MessagingApi(api_client).reply_message(
+                ReplyMessageRequest(replyToken=event.reply_token, messages=messages)
             )
+        logger.info(
+            "LINE message processing completed in %.3fs",
+            perf_counter() - process_started,
+        )
