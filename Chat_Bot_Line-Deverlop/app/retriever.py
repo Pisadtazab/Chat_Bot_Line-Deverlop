@@ -45,6 +45,7 @@ EXTENDED_QUERY_TERMS = (
     "เปรียบเทียบ",
     "สรุป",
 )
+ADVISOR_RECOMMENDATION_TERMS = ("แนะนำ", "เหมาะ", "ที่ปรึกษา", "เลือก")
 
 
 # Typhoon Client
@@ -111,8 +112,14 @@ def query_rag(query_text):
             for term in ("ทั้งหมด", "ทุกคน", "ทุกอาจารย์", "รายชื่อ", "มีใครบ้าง")
         )
     )
-    needs_extended_answer = needs_all_advisors or any(
-        term in query_text for term in EXTENDED_QUERY_TERMS
+    advisor_recommendation_requested = (
+        any(term in query_text for term in ("อาจารย์", "อจารย์", "ที่ปรึกษา"))
+        and any(term in query_text for term in ADVISOR_RECOMMENDATION_TERMS)
+    )
+    needs_extended_answer = (
+        needs_all_advisors
+        or advisor_recommendation_requested
+        or any(term in query_text for term in EXTENDED_QUERY_TERMS)
     )
     image_requested = any(term in query_text.lower() for term in IMAGE_REQUEST_TERMS)
     if needs_all_advisors:
@@ -213,6 +220,7 @@ def query_rag(query_text):
 
 
 {"เมื่อขอรายชื่ออาจารย์ทั้งหมด ให้ไล่รวบรวมชื่ออาจารย์ทุกชื่อที่ปรากฏในบริบทนี้ ตัดชื่อซ้ำ และห้ามจำกัดจำนวนชื่อ" if needs_all_advisors else ""}
+{"เมื่อผู้ใช้ขอแนะนำอาจารย์ที่ปรึกษา ให้พิจารณาวัตถุประสงค์ หัวข้อ ปัญหา และวิธีทำโปรเจกต์ที่ผู้ใช้ระบุ แล้วเทียบกับความเชี่ยวชาญ/งานวิจัยที่มีหลักฐานในบริบทเท่านั้น แนะนำเฉพาะอาจารย์ที่ตรง พร้อมเหตุผลที่โยงกับข้อมูลในบริบท ห้ามเสนอชื่ออื่นเพียงเพราะปรากฏในเอกสารหรือเพื่อให้มีตัวเลือก หากข้อมูลโปรเจกต์หรือข้อมูลความเชี่ยวชาญไม่พอ ให้ถามรายละเอียดเพิ่มหรือบอกว่ายังจับคู่ไม่ได้ ห้ามเดาความเชี่ยวชาญ" if advisor_recommendation_requested else ""}
 
 บริบท:
 {context}
