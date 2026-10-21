@@ -19,7 +19,7 @@ LINE message ──▶ /callback ──▶ BAAI/bge-m3 (Hugging Face)
                                       │
                          text + Cloudinary image URLs
                                       ▼
-                                  LINE Push
+                                  LINE Reply
 
 Booking system ──▶ notification POST routes ──▶ LINE Flex Push API
 BORC.BookingOnline ──▶ 60-second reminder loop ──▶ LINE Flex Push API
@@ -71,9 +71,24 @@ extractpdf-flow.txt                # Detailed PDF and RAG flow
 2. ระบบสร้าง embedding ของคำถามด้วย BAAI/bge-m3 ผ่าน Hugging Face Inference API
 3. ค้นเอกสารด้วย MongoDB Vector Search index `vector_index2`
 4. ส่งคำถามและบริบทให้ Typhoon API สร้างคำตอบและเลือกรูปจาก URL ที่พบในผลค้นหา
-5. ตรวจว่า URL รูปอยู่ในผลค้นหาจริง แล้วส่งข้อความและรูปผ่าน LINE Push API
+5. ตรวจว่า URL รูปอยู่ในผลค้นหาจริง แล้วตอบข้อความและรูปกลับผ่าน LINE Reply API
 
 การสรุป PDF ด้วย Typhoon เกิดตอน upload และส่งกลับใน API response; summary ยังไม่ถูก index เข้า Vector Search
+
+## LINE: Reply กับ Push ใช้ต่างกันอย่างไร
+
+- **Reply message** ใช้ตอบข้อความที่ผู้ใช้เพิ่งส่งเข้ามาทาง webhook (`/callback`) โดยใช้ `replyToken` จาก event ใน `app/services/line_bot.py` คำตอบจาก RAG (ข้อความและรูป) จึงส่งด้วย Reply API ได้ ต้องตอบภายในช่วงเวลาที่ LINE กำหนด และ reply token ใช้ได้ครั้งเดียว
+- **Push message** ใช้ส่งข้อความใหม่ไปยัง LINE user ที่รู้จัก `userId` โดยไม่ต้องมีข้อความจากผู้ใช้ในขณะนั้น เช่น booking, แจ้งเตือน และ Flex notification ใน `app/notification/` ใช้ Push API
+- การแจ้งเตือน booking เป็น Push เท่านั้น เพราะเกิดจากระบบจองหรือ background loop ไม่ได้เกิดจาก webhook ข้อความของผู้ใช้ จึงไม่มี `replyToken` ให้ใช้ Reply
+- Push อยู่ภายใต้โควตาการส่งข้อความของ LINE OA; หากเกินโควตรายเดือน LINE จะตอบ `429` และข้อความจะไม่ถูกส่ง ส่วน Reply ใช้ตอบบทสนทนาตาม reply token ไม่ใช่วิธีส่งการแจ้งเตือนแทน Push
+
+## Prompt ของ RAG
+
+คำสั่งของโมเดลแบ่งเป็นสองส่วนเพื่อให้แก้ได้ตรงจุด:
+
+- `app/retriever.py` สร้าง prompt รายคำถาม โดยใส่คำถามและ context ที่ค้นได้จาก MongoDB พร้อมกติกาของงานนั้น เช่น การใช้ข้อมูลอาจารย์จาก context, การเลือกรูป, และรูปแบบ JSON ที่ต้องส่งกลับ จากนั้นเรียก Typhoon และตรวจ/แยก `answer` กับ `image_urls` ก่อนส่งให้ LINE
+- `app/promrt_typhoon.py` กำหนด `DOCUMENT_SYSTEM_PROMPT` ซึ่งเป็นกติกาหลักระดับ system ที่ใช้กับทุกคำถาม RAG เช่น บทบาท, ความปลอดภัย, วิธีอ้างอิงข้อมูลจากเอกสาร และรูปแบบการตอบ
+- เมื่อปรับพฤติกรรมเฉพาะงานหรือ context ของคำถาม ให้แก้ `retriever.py`; เมื่อปรับกติกากลางที่ควรมีผลกับทุกคำถาม ให้แก้ `promrt_typhoon.py` ระวังให้กติกาทั้งสองส่วนไม่ขัดกัน โดยเฉพาะสัญญารูปแบบ JSON เพราะโค้ดใช้ parse ผลลัพธ์นี้
 
 ## API routes
 

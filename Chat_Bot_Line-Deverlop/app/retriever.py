@@ -10,6 +10,10 @@ from openai import OpenAI
 from app.DB.database import collection
 from app.promrt_typhoon import DOCUMENT_SYSTEM_PROMPT
 from app.routers.extractPDF import embed_text
+from app.services.image_selection import (
+    IMAGE_REQUEST_TERMS,
+    select_image_urls,
+)
 
 
 # โหลด environment variables
@@ -110,6 +114,7 @@ def query_rag(query_text):
     needs_extended_answer = needs_all_advisors or any(
         term in query_text for term in EXTENDED_QUERY_TERMS
     )
+    image_requested = any(term in query_text.lower() for term in IMAGE_REQUEST_TERMS)
     if needs_all_advisors:
         mongo_started = time.perf_counter()
         try:
@@ -205,6 +210,7 @@ def query_rag(query_text):
 
 คำถาม:
 {query_text}
+
 
 {"เมื่อขอรายชื่ออาจารย์ทั้งหมด ให้ไล่รวบรวมชื่ออาจารย์ทุกชื่อที่ปรากฏในบริบทนี้ ตัดชื่อซ้ำ และห้ามจำกัดจำนวนชื่อ" if needs_all_advisors else ""}
 
@@ -410,34 +416,9 @@ def query_rag(query_text):
     # ตรวจสอบ URL กับ MongoDB context
     # ============================================================
 
-    valid_image_urls = {
-        result.get("metadata", {}).get("image_url")
-        for result in results
-        if (
-            result.get("metadata", {}).get("type") == "image"
-            and result.get("metadata", {}).get("image_url")
-        )
-    }
+    image_results = select_image_urls(query_text, results, selected_image_urls)
 
-    # เอาเฉพาะ URL ที่มีอยู่จริงใน MongoDB
-    image_results = [
-        url
-        for url in selected_image_urls
-        if isinstance(url, str)
-        and url in valid_image_urls
-    ]
-
-    # ป้องกันรูปซ้ำ
-    image_results = list(dict.fromkeys(image_results))
-    if any(
-        term in query_text.lower()
-        for term in ("หลายคน", "หลายท่าน", "ทุกคน", "ทุกท่าน", "ทั้งหมด", "ทั้งคู่", "สองคน", "2 คน")
-    ):
-        image_results = []
-    else:
-        image_results = image_results[:1]
-
-    if raw_json_in_answer:
+    if raw_json_in_answer and not image_requested:
         image_results = []
 
     logger.info("Selected %d relevant image results", len(image_results))
