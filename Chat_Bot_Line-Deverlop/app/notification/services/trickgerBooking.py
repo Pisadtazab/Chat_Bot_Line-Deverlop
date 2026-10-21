@@ -8,6 +8,8 @@ from app.notification.helpers.flex import flex_row, send_flex_notifications
 
 
 TZ = ZoneInfo("Asia/Bangkok")
+# shortcut: tracks failed pending bookings in memory; use persistent deduplication if this set grows large.
+_logged_notification_failures: set[tuple[str, str]] = set()
 
 
 def template_notify(booking: dict, marker: str, title: str, color: str, status: str) -> None:
@@ -22,11 +24,15 @@ def template_notify(booking: dict, marker: str, title: str, color: str, status: 
         ]
     )
     if delivery["failed"] or not delivery["sent"]:
-        logging.warning(
-            "Booking notification not delivered; booking_id=%s marker=%s result=%s",
-            booking.get("_id"), marker, delivery,
-        )
+        failure_key = (str(booking.get("_id")), marker)
+        if failure_key not in _logged_notification_failures:
+            logging.warning(
+                "Booking notification not delivered; booking_id=%s marker=%s result=%s",
+                booking.get("_id"), marker, delivery,
+            )
+            _logged_notification_failures.add(failure_key)
         return
+    _logged_notification_failures.discard((str(booking.get("_id")), marker))
     collection_BookingOnline.update_one({"_id": booking["_id"]}, {"$set": {marker: True}})
 
 
