@@ -14,9 +14,12 @@ from app.notification.services.trickgerBooking import booking_notification_loop
 from app.notification.users.Advisor.NotifyQueue import router as advisor_queue_router
 from app.notification.users.Advisor.NotifyQueueCancelled import router as advisor_cancelled_router
 from app.notification.users.Advisor.NotifyRecheduleAdvisor import router as advisor_reschedule_router
+from app.notification.users.Admin.NotifyPendding import router as admin_pending_login_router
+from app.notification.users.Student.NotifyApprovedLogin import router as student_approved_login_router
 from app.notification.users.Student.NotifyQueueStudent import router as student_queue_router
 from app.notification.users.Student.NotifyReaheduleStudent import router as student_reschedule_router
 from app.notification.users.Student.NotifyUrl_Student import router as student_chat_router
+from app.notification.users.Student.NotifyUrl_Students_Group import router as student_group_chat_router
 from app.retriever import query_rag, respone_message_LLM, send_image
 from app.routers import deleteFile, extractPDF, getData
 from app.services.line_bot import LineBotService
@@ -59,12 +62,15 @@ for router in (extractPDF.router, deleteFile.router, getData.router):
     app.include_router(router, dependencies=api_key_required)
 
 app.include_router(notify_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
+app.include_router(admin_pending_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
+app.include_router(student_approved_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
 app.include_router(student_queue_router, prefix="/NotifyQueueStudent", tags=["Notification"], dependencies=api_key_required)
 app.include_router(student_reschedule_router, prefix="/NotifyQueueStudent", tags=["Notification"], dependencies=api_key_required)
 app.include_router(advisor_queue_router, prefix="/NotifyQueueAdivsor", tags=["Notification"], dependencies=api_key_required)
 app.include_router(advisor_cancelled_router, prefix="/NotifyCancelled", tags=["Notification"], dependencies=api_key_required)
 app.include_router(advisor_reschedule_router, prefix="/NotifyQueueAdivsor", tags=["Notification"], dependencies=api_key_required)
 app.include_router(student_chat_router, prefix="/NotifyChat", tags=["Notification_Chat"], dependencies=api_key_required)
+app.include_router(student_group_chat_router, prefix="/NotifyChatGroup", tags=["Notification_Chat"], dependencies=api_key_required)
 
 line_bot = LineBotService(
     access_token=get_secret_value("ACCESS_TOKEN") or "",

@@ -13,27 +13,40 @@ _logged_notification_failures: set[tuple[str, str]] = set()
 
 
 def template_notify(booking: dict, marker: str, title: str, color: str, status: str) -> None:
-    delivery = send_flex_notifications(
-        [booking.get("UserId"), booking.get("AdvisorId")], title, color, [
-            flex_row("👤 นักศึกษา", booking.get("StudentName", "-"), wrap=True),
-            flex_row("👨‍🏫 อาจารย์", booking.get("Advisor_Name", "-"), wrap=True),
-            flex_row("📝 หัวข้อ", booking.get("ResearchTopic", "-"), wrap=True),
-            flex_row("📅 วันที่", str(booking.get("Date", "-"))),
-            flex_row("⏰ เวลา", str(booking.get("Time", "-"))),
-            flex_row("🔖 สถานะ", status, value_color=color, value_weight="bold", wrap=True),
-        ]
-    )
-    if delivery["failed"] or not delivery["sent"]:
-        failure_key = (str(booking.get("_id")), marker)
-        if failure_key not in _logged_notification_failures:
-            logging.warning(
-                "Booking notification not delivered; booking_id=%s marker=%s result=%s",
-                booking.get("_id"), marker, delivery,
+    user_ids = list(dict.fromkeys(user_id for user_id in (booking.get("UserId"), booking.get("AdvisorId")) if user_id))
+    delivered_field = f"{marker}UserIds"
+    delivered_ids = set(booking.get(delivered_field, []))
+    body = [
+        flex_row("👤 นักศึกษา", booking.get("StudentName", "-"), wrap=True),
+        flex_row("👨‍🏫 อาจารย์", booking.get("Advisor_Name", "-"), wrap=True),
+        flex_row("📝 หัวข้อ", booking.get("ResearchTopic", "-"), wrap=True),
+        flex_row("📅 วันที่", str(booking.get("Date", "-"))),
+        flex_row("⏰ เวลา", str(booking.get("Time", "-"))),
+        flex_row("🔖 สถานะ", status, value_color=color, value_weight="bold", wrap=True),
+    ]
+
+    for user_id in user_ids:
+        if user_id in delivered_ids:
+            continue
+        # shortcut: a crash before MongoDB records success can resend; use LINE retry keys to close this gap.
+        delivery = send_flex_notifications([user_id], title, color, body)
+        if delivery.get("sent", 0):
+            collection_BookingOnline.update_one(
+                {"_id": booking["_id"]}, {"$addToSet": {delivered_field: user_id}}
             )
-            _logged_notification_failures.add(failure_key)
-        return
-    _logged_notification_failures.discard((str(booking.get("_id")), marker))
-    collection_BookingOnline.update_one({"_id": booking["_id"]}, {"$set": {marker: True}})
+            delivered_ids.add(user_id)
+        else:
+            failure_key = (str(booking.get("_id")), marker)
+            if failure_key not in _logged_notification_failures:
+                logging.warning(
+                    "Booking notification not delivered; booking_id=%s marker=%s user_id=%s result=%s",
+                    booking.get("_id"), marker, user_id, delivery,
+                )
+                _logged_notification_failures.add(failure_key)
+
+    if user_ids and all(user_id in delivered_ids for user_id in user_ids):
+        _logged_notification_failures.discard((str(booking.get("_id")), marker))
+        collection_BookingOnline.update_one({"_id": booking["_id"]}, {"$set": {marker: True}})
 
 
 def trigger_booking_notifications() -> None:

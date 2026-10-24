@@ -153,13 +153,13 @@ On app startup, a background loop reads the existing `BORC.BookingOnline` record
 - `Status: "Approved"`: sends a reminder during the 30 minutes before the appointment, then sends another Flex when the appointment start time is reached.
 - `Status: "Completed"`: sends a completion Flex.
 - `Date` uses `YYYY-MM-DD`; `Time` uses a range such as `13:00-15:00`. The first time is treated as the appointment start.
-- `ReminderSent`, `StartNotified`, and `CompletionNotified` are stored on the booking document to prevent repeated notifications.
+- Each notification marker is stored on the booking document after all recipients succeed; `<marker>UserIds` records successful recipients so retries skip them.
 
 The background loop checks once per minute, so a time-based notification can be up to about one minute late. No separate MongoDB trigger is required.
 
 ## Notification recipients
 
-Booking action endpoints require sender and recipient LINE IDs. A missing or `null` required field is rejected by FastAPI; delivery failures are reported in the HTTP response without sending a separate failure Flex. The automated `BookingOnline` reminders send to whichever LINE IDs are present in each booking record and store a notification flag after the attempt.
+Booking action endpoints require sender and recipient LINE IDs. A missing or `null` required field is rejected by FastAPI; delivery failures are reported in the HTTP response without sending a separate failure Flex. The automated `BookingOnline` reminders send to whichever LINE IDs are present in each booking record and store per-recipient delivery results to avoid resending to recipients who already received the notification.
 
 ## Environment variables
 
