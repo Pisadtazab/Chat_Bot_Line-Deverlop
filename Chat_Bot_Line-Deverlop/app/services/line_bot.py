@@ -9,14 +9,14 @@ from weakref import WeakValueDictionary
 
 import requests
 from linebot.v3 import WebhookHandler
-from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, PushMessageRequest,ReplyMessageRequest
+from linebot.v3.messaging import ApiClient, Configuration, MessagingApi, ReplyMessageRequest
 from linebot.v3.webhooks import FollowEvent, MessageEvent, TextMessageContent
 
 logger = logging.getLogger(__name__)
 MAX_LINE_MESSAGES = 5
 
 class LineBotService:
-    """Owns LINE webhook parsing, message ordering, and Push API delivery."""
+    """Owns LINE webhook parsing and message ordering."""
 
     def __init__(
         self,
@@ -27,7 +27,6 @@ class LineBotService:
         make_text_message: Callable[[str], Any],
         make_image_messages: Callable[[list[Any]], list[Any]],
         find_notification_user: Callable[[str], dict[str, Any] | None],
-        push_notification: Callable[..., Any],
         max_concurrent_jobs: int = 8,
         max_processed_event_ids: int = 10_000,
     ) -> None:
@@ -38,7 +37,6 @@ class LineBotService:
         self.make_text_message = make_text_message
         self.make_image_messages = make_image_messages
         self.find_notification_user = find_notification_user
-        self.push_notification = push_notification
         self.user_message_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self.rag_semaphore = asyncio.Semaphore(max_concurrent_jobs)
         self._processed_event_ids: set[str] = set()
@@ -91,20 +89,14 @@ class LineBotService:
         user_id = event.source.user_id
         user = self.find_notification_user(user_id)
         if user:
-            self.push_notification(
-                user_id=user_id,
-                title=f"สวัสดีคุณ {user.get('Firstname', 'คุณ')}! 👋",
-                message="ระบบแจ้งเตือนพร้อมแล้ว\nยินดีต้อนรับเข้าสู่ระบบ 😊",
-                color="#00B900",
-            )
-            return
+            text = f"สวัสดีคุณ {user.get('Firstname', 'คุณ')}! 👋\nระบบแจ้งเตือนพร้อมแล้ว\nยินดีต้อนรับเข้าสู่ระบบ 😊"
+        else:
+            text = "ยังไม่พบข้อมูลการสมัคร ❌\nกรุณาสมัครสมาชิกในระบบจองเพื่อรับการแจ้งเตือนคิวและนัดหมาย\nระหว่างนี้สามารถใช้แชทบอทสอบถามได้"
 
-        self.push_notification(
-            user_id=user_id,
-            title="ยังไม่พบข้อมูลการสมัคร ❌",
-            message="กรุณาสมัครสมาชิกในระบบจองเพื่อรับการแจ้งเตือนคิวและนัดหมาย\nระหว่างนี้สามารถใช้แชทบอทสอบถามได้",
-            color="#FF4444",
-        )
+        with ApiClient(self.configuration) as api_client:
+            MessagingApi(api_client).reply_message(
+                ReplyMessageRequest(replyToken=event.reply_token, messages=[self.make_text_message(text)])
+            )
 
     async def queue_message_for_user(self, event: MessageEvent) -> None:
         queued_at = perf_counter()

@@ -17,7 +17,6 @@ def make_service(**overrides):
         "make_text_message": Mock(return_value=TextMessage(text="answer")),
         "make_image_messages": Mock(return_value=[]),
         "find_notification_user": Mock(return_value=None),
-        "push_notification": Mock(),
     }
     defaults.update(overrides)
     return LineBotService(**defaults)
@@ -76,19 +75,18 @@ class LineBotServiceTests(unittest.TestCase):
         self.assertIsInstance(request.messages[1], ImageMessage)
         service.make_image_messages.assert_called_once_with(image_urls[:1])
 
-    def test_follow_event_sends_registered_user_welcome(self):
-        notify = Mock()
-        service = make_service(
-            find_notification_user=Mock(return_value={"Firstname": "Ada"}),
-            push_notification=notify,
-        )
+    def test_follow_event_replies_with_registered_user_welcome(self):
+        service = make_service(find_notification_user=Mock(return_value={"Firstname": "Ada"}))
+        event = SimpleNamespace(reply_token="reply-token", source=SimpleNamespace(user_id="U1"))
 
-        service.handle_follow(SimpleNamespace(source=SimpleNamespace(user_id="U1")))
+        with patch("app.services.line_bot.ApiClient"), patch(
+            "app.services.line_bot.MessagingApi"
+        ) as messaging_api:
+            service.handle_follow(event)
 
-        notify.assert_called_once()
-        self.assertEqual(notify.call_args.kwargs["user_id"], "U1")
-        self.assertIn("Ada", notify.call_args.kwargs["title"])
-
+        request = messaging_api.return_value.reply_message.call_args.args[0]
+        self.assertEqual(request.reply_token, "reply-token")
+        self.assertIn("Ada", request.messages[0].text)
     def test_same_user_messages_are_processed_in_order(self):
         service = make_service(max_concurrent_jobs=2)
         processed = []

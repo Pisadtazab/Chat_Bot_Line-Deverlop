@@ -9,13 +9,11 @@ from linebot.v3.exceptions import InvalidSignatureError
 
 from app.notification.DB.database_noti import collection as notify_collection
 from app.notification.routers.GetLine_id import router as notify_login_router
-from app.notification.routers.line_notify import push_flex_notification
 from app.notification.services.trickgerBooking import booking_notification_loop
 from app.notification.users.Advisor.NotifyQueue import router as advisor_queue_router
 from app.notification.users.Advisor.NotifyQueueCancelled import router as advisor_cancelled_router
 from app.notification.users.Advisor.NotifyRecheduleAdvisor import router as advisor_reschedule_router
 from app.notification.users.Admin.NotifyPendding import router as admin_pending_login_router
-from app.notification.users.Student.NotifyApprovedLogin import router as student_approved_login_router
 from app.notification.users.Student.NotifyQueueStudent import router as student_queue_router
 from app.notification.users.Student.NotifyReaheduleStudent import router as student_reschedule_router
 from app.notification.users.Student.NotifyUrl_Student import router as student_chat_router
@@ -63,7 +61,6 @@ for router in (extractPDF.router, deleteFile.router, getData.router):
 
 app.include_router(notify_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
 app.include_router(admin_pending_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
-app.include_router(student_approved_login_router, prefix="/NotifyFristLogin", tags=["Notification"], dependencies=api_key_required)
 app.include_router(student_queue_router, prefix="/NotifyQueueStudent", tags=["Notification"], dependencies=api_key_required)
 app.include_router(student_reschedule_router, prefix="/NotifyQueueStudent", tags=["Notification"], dependencies=api_key_required)
 app.include_router(advisor_queue_router, prefix="/NotifyQueueAdivsor", tags=["Notification"], dependencies=api_key_required)
@@ -79,7 +76,6 @@ line_bot = LineBotService(
     make_text_message=respone_message_LLM,
     make_image_messages=send_image,
     find_notification_user=lambda user_id: notify_collection.find_one({"userId": user_id}),
-    push_notification=push_flex_notification,
 )
 
 

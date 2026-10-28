@@ -8,6 +8,7 @@ from app.notification.helpers.flex import FOOTER, send_flex_notification
 class LineNotification(BaseModel):
     line_user_id: Optional[list[str]]
     url: str
+    AdvisorName:str
   
 
 
@@ -25,7 +26,7 @@ def receive_line_notification_url(payload: LineNotification):
         result = send_flex_notification(sent, title, "#01579B", [
             {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#1a1a1a"},
             {"type": "separator"},
-            {"type": "text", "text": "คุณมีลิงก์นัดหมายกลุ่ม กดปุ่มด้านล่างเพื่อเปิด", "size": "sm", "wrap": True, "color": "#555555"},
+            {"type": "text", "text": f"คุณมีลิงก์นัดหมายกลุ่มกับ {payload.AdvisorName} กดปุ่มด้านล่างเพื่อเปิด", "size": "sm", "wrap": True, "color": "#555555"},
         ], header_text=" 👥 การแจ้งเตือนกลุ่ม", footer=[
             {"type": "button", "style": "primary", "height": "sm", "color": "#00B900", "action": {"type": "uri", "label": "เปิดลิงก์", "uri": payload.url}},
             FOOTER,
