@@ -25,14 +25,16 @@ def receive_line_notification_url(payload: LineNotification):
     for sent in payload.line_user_id or []:
         result = send_flex_notification(sent, title, "#01579B", [
             {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#1a1a1a"},
+            {"text":f"จากคุณ {payload.AdvisorName}"},
             {"type": "separator"},
-            {"type": "text", "text": f"คุณมีลิงก์นัดหมายกลุ่มกับ {payload.AdvisorName} กดปุ่มด้านล่างเพื่อเปิด", "size": "sm", "wrap": True, "color": "#555555"},
+            {"type": "text", "text": f"คุณมีลิงก์นัดหมายกลุ่ม กดปุ่มด้านล่างเพื่อเปิด", "size": "sm", "wrap": True, "color": "#555555"},
         ], header_text=" 👥 การแจ้งเตือนกลุ่ม", footer=[
             {"type": "button", "style": "primary", "height": "sm", "color": "#00B900", "action": {"type": "uri", "label": "เปิดลิงก์", "uri": payload.url}},
             FOOTER,
         ])
         results.append({"line_user_id": sent, **result})
         print(f" check value send_url: {result}")
+
     sent_count = sum(result.get("status") == "success" for result in results)
     failed_count = len(results) - sent_count
     status = "success" if not failed_count and results else "partial" if sent_count else "error" if failed_count else "skipped"
