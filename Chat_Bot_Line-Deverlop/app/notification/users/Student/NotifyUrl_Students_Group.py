@@ -8,7 +8,7 @@ from app.notification.helpers.flex import FOOTER, send_flex_notification
 class LineNotification(BaseModel):
     line_user_id: Optional[list[str]]
     url: str
-    AdvisorName:str
+    AdvisorName: str
   
 
 
@@ -32,7 +32,7 @@ def receive_line_notification_url(payload: LineNotification):
             FOOTER,
         ])
         results.append({"line_user_id": sent, **result})
-
+        print(f" check value send_url: {result}")
     sent_count = sum(result.get("status") == "success" for result in results)
     failed_count = len(results) - sent_count
     status = "success" if not failed_count and results else "partial" if sent_count else "error" if failed_count else "skipped"
