@@ -25,7 +25,7 @@ def receive_line_notification_url(payload: LineNotification):
     for sent in payload.line_user_id or []:
         result = send_flex_notification(sent, title, "#01579B", [
             {"type": "text", "text": title, "weight": "bold", "size": "lg", "wrap": True, "color": "#1a1a1a"},
-            {"text":f"จากคุณ {payload.AdvisorName}"},
+            {"type": "text","text":f"จากคุณ {payload.AdvisorName}"},
             {"type": "separator"},
             {"type": "text", "text": f"คุณมีลิงก์นัดหมายกลุ่ม กดปุ่มด้านล่างเพื่อเปิด", "size": "sm", "wrap": True, "color": "#555555"},
         ], header_text=" 👥 การแจ้งเตือนกลุ่ม", footer=[
